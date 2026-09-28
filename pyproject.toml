@@ -1,0 +1,10 @@
+# Test and lint configuration only: this repository is not a Python package.
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-exclude = ["custom_components", "tests/airdress", "tests/logbook_common.py", "upstream"]

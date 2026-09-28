@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # HACS and hassfest move with Home Assistant; catch that before a user does.
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prek:
+    name: Pre-commit (prek), including the generated-files check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      - run: uvx prek run --all-files --show-diff-on-failure
+
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3 # master
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        with:
+          category: integration
+          # The brands check looks for the domain in home-assistant/brands.
+          # This integration ships its images in custom_components/airdress/brand
+          # instead, which Home Assistant serves for a custom integration.
+          ignore: brands
+
+  test:
+    name: Tests (released Home Assistant)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.14"
+      - run: uv venv
+      - run: uv pip install -r requirements_test.txt
+      - run: .venv/bin/python -m pytest -q

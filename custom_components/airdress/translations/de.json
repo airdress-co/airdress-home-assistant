@@ -1,0 +1,104 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Der Dienst ist bereits eingerichtet",
+      "busy": "Auf deinem Operator warten zu viele Verknüpfungen auf Freigabe. Versuche es in einer Minute erneut.",
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "cannot_connect_hub": "airdress.co ist für die Anmeldung nicht erreichbar. Prüfe die Internetverbindung von Home Assistant und versuche es erneut.",
+      "denied": "Die Verknüpfung wurde auf deinem Operator abgelehnt. Starte neu, um es noch einmal zu versuchen.",
+      "enroll_refused": "Dein Operator hat die Verknüpfung mit Home Assistant abgelehnt. Starte neu oder prüfe die Maschinen-Einstellungen des Operators.",
+      "expired": "Die Verknüpfung wurde nicht rechtzeitig freigegeben. Starte neu, um einen neuen Code zu erhalten.",
+      "invalid_preauth_key": "Der Pre-Auth-Schlüssel wurde nicht angenommen. Erstelle auf deinem Operator einen neuen.",
+      "link_denied": "Die Anmeldung wurde auf airdress.co abgelehnt. Starte neu, um es noch einmal zu versuchen.",
+      "link_expired": "Der Anmeldecode ist abgelaufen, bevor er verwendet wurde. Starte neu, um einen neuen Code zu erhalten.",
+      "not_enabled": "Diese Airdress nimmt keine Verknüpfungen mit Home Assistant an. Die Maschinen-Registrierung ist auf ihrem Operator ausgeschaltet.",
+      "operator_proof": "Die Antwort des Operators ließ sich nicht prüfen und wurde deshalb nicht vertraut. Prüfe die Adresse und versuche es erneut."
+    },
+    "error": {
+      "busy": "Auf deinem Operator warten zu viele Verknüpfungen auf Freigabe. Versuche es in einer Minute erneut.",
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "enroll_refused": "Dein Operator hat die Verknüpfung mit Home Assistant abgelehnt.",
+      "invalid_address": "Gib die Adresse deiner Airdress ein, zum Beispiel `name.a.airdr.es`.",
+      "invalid_preauth_key": "Der Pre-Auth-Schlüssel wurde nicht angenommen. Erstelle auf deinem Operator einen neuen.",
+      "not_enabled": "Diese Airdress nimmt keine Verknüpfungen mit Home Assistant an. Die Maschinen-Registrierung ist auf ihrem Operator ausgeschaltet.",
+      "operator_proof": "Die Antwort des Operators ließ sich nicht prüfen und wurde deshalb nicht vertraut. Prüfe die Adresse und versuche es erneut."
+    },
+    "progress": {
+      "approve": "Öffne [die Freigabeseite deines Operators]({url}) und gib **{user_code}** frei.\n\nPrüfe vor der Freigabe, dass der Operator diesen Bestätigungscode zeigt:\n\n```\n{confirmation_code}\n```\n\nDiese Seite geht von selbst weiter, sobald du freigegeben hast.",
+      "link": "Öffne [airdress.co]({url}), melde dich an und bestätige den Code:\n\n```\n{code}\n```\n\nDiese Seite geht von selbst weiter, sobald du deine Airdress gewählt hast."
+    },
+    "step": {
+      "address": {
+        "data": {
+          "address": "Adresse"
+        },
+        "data_description": {
+          "address": "Die Adresse deiner Airdress, zum Beispiel `name.a.airdr.es`."
+        },
+        "description": "Home Assistant bittet den Operator deiner Airdress um die Verknüpfung. Du gibst sie dort frei.",
+        "title": "Über die Adresse verknüpfen"
+      },
+      "preauth": {
+        "data": {
+          "address": "Adresse",
+          "preauth_key": "Pre-Auth-Schlüssel"
+        },
+        "data_description": {
+          "address": "Die Adresse deiner Airdress, zum Beispiel `name.a.airdr.es`.",
+          "preauth_key": "Ein Schlüssel, den du auf deinem Operator erstellt hast, um eine Maschine ohne Freigabe von Hand zu verknüpfen."
+        },
+        "title": "Mit einem Pre-Auth-Schlüssel verknüpfen"
+      },
+      "user": {
+        "description": "Verknüpfe Home Assistant mit deiner Airdress, damit deine Funktionen die Aktionen ausführen und die Entitäten lesen können, die du freigibst. Nichts wird geteilt, bevor du es in den Optionen auswählst.",
+        "menu_options": {
+          "address": "Adresse meiner Airdress eingeben",
+          "link": "Mit Airdress anmelden",
+          "preauth": "Pre-Auth-Schlüssel verwenden"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Keine Verbindung zum Operator deiner Airdress."
+    },
+    "home_disabled": {
+      "message": "Das Zuhause, als das dieses Home Assistant verknüpft ist, ist auf deinem Operator ausgeschaltet."
+    },
+    "no_pinned_key": {
+      "message": "Diese Verknüpfung hat keinen festgelegten Operator-Schlüssel. Entferne sie und verknüpfe erneut."
+    },
+    "not_authorized": {
+      "message": "Dein Operator akzeptiert dieses Home Assistant nicht mehr. Es wurde widerrufen oder seine Freigabe ist abgelaufen; entferne es und verknüpfe erneut."
+    },
+    "not_linked": {
+      "message": "Dein Operator kennt dieses Home Assistant, hat es aber noch nicht als Zuhause verknüpft."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "observe": "Entitäten, die Airdress beobachten darf",
+          "operate": "Entitäten, die Airdress bedienen darf"
+        },
+        "data_description": {
+          "observe": "Deine Funktionen können ihren Zustand lesen.",
+          "operate": "Deine Funktionen können ihre Aktionen ausführen und ihren Zustand lesen."
+        },
+        "description": "Wähle, was die Funktionen deiner Airdress erreichen können. Alles andere bleibt für sie unsichtbar."
+      },
+      "sensitive": {
+        "data": {
+          "sensitive": "Airdress erlauben, diese sensiblen Entitäten zu bedienen"
+        },
+        "data_description": {
+          "sensitive": "Schlösser, Alarmzentralen sowie Garagentore, Türen, Tore, Fenster oder Abdeckungen ohne Klasse. Eine hier nicht gewählte Entität wird abgelehnt, egal was dein Operator erlaubt."
+        },
+        "description": "{count} der Entitäten, die du zum Bedienen gewählt hast, verriegeln, entriegeln oder öffnen etwas. Sie werden abgelehnt, solange du nicht jede einzeln hier und auf deinem Operator erlaubst.",
+        "title": "Sensible Entitäten"
+      }
+    }
+  }
+}

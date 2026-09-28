@@ -1,0 +1,12 @@
+{
+  "domain": "airdress",
+  "name": "Airdress",
+  "codeowners": ["@eljefedelrodeodeljefe"],
+  "config_flow": true,
+  "documentation": "https://www.home-assistant.io/integrations/airdress",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "loggers": ["airdress_home"],
+  "quality_scale": "bronze",
+  "requirements": ["airdress-home==0.1.0"]
+}

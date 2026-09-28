@@ -1,0 +1,19 @@
+{
+  "domain": "airdress",
+  "name": "Airdress",
+  "codeowners": [
+    "@eljefedelrodeodeljefe"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/airdress-co/airdress-home-assistant#readme",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/airdress-co/airdress-home-assistant/issues",
+  "loggers": [
+    "airdress_home"
+  ],
+  "requirements": [
+    "airdress-home==0.1.0b1"
+  ],
+  "version": "0.1.0b1"
+}
