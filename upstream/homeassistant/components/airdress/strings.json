@@ -1,0 +1,104 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
+      "busy": "[%key:component::airdress::config::error::busy%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "cannot_connect_hub": "Could not reach airdress.co to sign in. Check the internet connection of Home Assistant and try again.",
+      "denied": "The link was declined on your operator. Start again to try once more.",
+      "enroll_refused": "Your operator refused to link Home Assistant. Start again, or check the operator's machine settings.",
+      "expired": "The link was not approved in time. Start again to get a new code.",
+      "invalid_preauth_key": "[%key:component::airdress::config::error::invalid_preauth_key%]",
+      "link_denied": "The sign-in was declined at airdress.co. Start again to try once more.",
+      "link_expired": "The sign-in code expired before it was used. Start again to get a new code.",
+      "not_enabled": "[%key:component::airdress::config::error::not_enabled%]",
+      "operator_proof": "[%key:component::airdress::config::error::operator_proof%]"
+    },
+    "error": {
+      "busy": "Your operator has too many links waiting to be approved. Try again in a minute.",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "enroll_refused": "Your operator refused to link Home Assistant.",
+      "invalid_address": "Enter the address of your airdress, for example `name.a.airdr.es`.",
+      "invalid_preauth_key": "The pre-auth key was not accepted. Ask for a new one on your operator.",
+      "not_enabled": "This airdress does not accept Home Assistant links. Machine enrollment is turned off on its operator.",
+      "operator_proof": "The operator's answer could not be verified, so it was not trusted. Check the address and try again."
+    },
+    "progress": {
+      "approve": "Open [your operator's approval page]({url}) and approve **{user_code}**.\n\nBefore approving, check that the operator shows this confirmation code:\n\n```\n{confirmation_code}\n```\n\nThis page continues by itself once you approve.",
+      "link": "Open [airdress.co]({url}), sign in, and confirm the code:\n\n```\n{code}\n```\n\nThis page continues by itself once you have chosen your airdress."
+    },
+    "step": {
+      "address": {
+        "data": {
+          "address": "Address"
+        },
+        "data_description": {
+          "address": "The address of your airdress, for example `name.a.airdr.es`."
+        },
+        "description": "Home Assistant asks your airdress's operator to link it. You approve the link there.",
+        "title": "Link by address"
+      },
+      "preauth": {
+        "data": {
+          "address": "[%key:component::airdress::config::step::address::data::address%]",
+          "preauth_key": "Pre-auth key"
+        },
+        "data_description": {
+          "address": "[%key:component::airdress::config::step::address::data_description::address%]",
+          "preauth_key": "A key you created on your operator to link a machine without approving it by hand."
+        },
+        "title": "Link with a pre-auth key"
+      },
+      "user": {
+        "description": "Link Home Assistant to your airdress, so that your functions can run the actions and read the entities you choose to share. Nothing is shared until you choose it in the options.",
+        "menu_options": {
+          "address": "Enter my airdress's address",
+          "link": "Sign in with Airdress",
+          "preauth": "Use a pre-auth key"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Could not connect to your airdress's operator."
+    },
+    "home_disabled": {
+      "message": "The home this Home Assistant is linked as is switched off on your operator."
+    },
+    "no_pinned_key": {
+      "message": "This link has no pinned operator key. Remove it and link again."
+    },
+    "not_authorized": {
+      "message": "Your operator no longer accepts this Home Assistant. It was revoked or its approval lapsed; remove it and link again."
+    },
+    "not_linked": {
+      "message": "Your operator knows this Home Assistant but has not linked it as a home yet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "observe": "Entities Airdress can observe",
+          "operate": "Entities Airdress can operate"
+        },
+        "data_description": {
+          "observe": "Your functions can read their state.",
+          "operate": "Your functions can run their actions, and read their state."
+        },
+        "description": "Choose what your airdress's functions can reach. Nothing else is visible to them."
+      },
+      "sensitive": {
+        "data": {
+          "sensitive": "Allow Airdress to operate these sensitive entities"
+        },
+        "data_description": {
+          "sensitive": "Locks, alarm panels, and garage doors, doors, gates, windows or unclassified covers. An entity not chosen here is refused, whatever your operator allows."
+        },
+        "description": "{count} of the entities you chose to operate lock, unlock or open something. They are refused unless you allow each one here and on your operator.",
+        "title": "Sensitive entities"
+      }
+    }
+  }
+}

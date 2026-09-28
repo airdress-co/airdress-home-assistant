@@ -1,0 +1,33 @@
+"""Which entities are sensitive to operate, judged on this installation.
+
+The set itself belongs to the protocol (``airdress_home.sensitive``). This
+module only reads the device class Home Assistant knows for an entity, so the
+integration enforces its own opt-in whatever the operator sends.
+"""
+
+from airdress_home import is_sensitive
+from airdress_home.sensitive import SENSITIVE_CANDIDATE_DOMAINS
+
+from homeassistant.const import ATTR_DEVICE_CLASS
+from homeassistant.core import HomeAssistant, split_entity_id
+from homeassistant.helpers import entity_registry as er
+
+
+def device_class_of(hass: HomeAssistant, entity_id: str) -> str | None:
+    """The device class of ``entity_id``: the user's override, the state's, or none."""
+    if (entry := er.async_get(hass).async_get(entity_id)) is not None and (
+        entry.device_class is not None
+    ):
+        return entry.device_class
+    if (state := hass.states.get(entity_id)) is not None and isinstance(
+        device_class := state.attributes.get(ATTR_DEVICE_CLASS), str
+    ):
+        return device_class
+    return None
+
+
+def entity_is_sensitive(hass: HomeAssistant, entity_id: str) -> bool:
+    """Whether operating ``entity_id`` needs this installation's opt-in."""
+    if split_entity_id(entity_id)[0] not in SENSITIVE_CANDIDATE_DOMAINS:
+        return False
+    return is_sensitive(entity_id, device_class_of(hass, entity_id))

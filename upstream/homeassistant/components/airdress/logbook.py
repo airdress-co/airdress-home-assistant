@@ -1,0 +1,36 @@
+"""Describe Airdress events in the logbook."""
+
+from collections.abc import Callable
+from typing import Any
+
+from homeassistant.components.logbook import (
+    LOGBOOK_ENTRY_ENTITY_ID,
+    LOGBOOK_ENTRY_MESSAGE,
+    LOGBOOK_ENTRY_NAME,
+)
+from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.core import Event, HomeAssistant, callback
+
+from .const import DOMAIN, EVENT_OPERATE
+
+
+@callback
+def async_describe_events(
+    hass: HomeAssistant,
+    async_describe_event: Callable[[str, str, Callable[[Event], dict[str, Any]]], None],
+) -> None:
+    """Describe the actions Airdress runs."""
+
+    @callback
+    def async_describe_operate(event: Event) -> dict[str, Any]:
+        """Name the function that asked for an action."""
+        data = event.data
+        targets = data.get(ATTR_ENTITY_ID) or []
+        function = data.get("function") or "a function"
+        return {
+            LOGBOOK_ENTRY_NAME: "Airdress",
+            LOGBOOK_ENTRY_MESSAGE: f"{function} ran {data.get('action')}",
+            LOGBOOK_ENTRY_ENTITY_ID: targets[0] if targets else None,
+        }
+
+    async_describe_event(DOMAIN, EVENT_OPERATE, async_describe_operate)

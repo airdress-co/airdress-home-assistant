@@ -1,0 +1,396 @@
+"""Config flow for Airdress.
+
+Linking is the operator's machine enrollment: this installation generates a
+key, asks the owner's operator to enroll it, and waits while the owner compares
+a confirmation code and approves on the operator. Nothing here approves, and no
+password or token is entered. The operator is found one of three ways:
+
+* **Sign in with Airdress** — the hub at airdress.co introduces this
+  installation to the owner's operator; it never approves and never sees a key;
+* the airdress's address, typed;
+* a pre-auth key the owner created on the operator, with the address.
+"""
+
+import asyncio
+from typing import Any, override
+from urllib.parse import urlsplit
+
+import aiohttp
+from airdress_home import (
+    Enrollment,
+    EnrollmentDenied,
+    EnrollmentError,
+    EnrollmentExpired,
+    MachineKey,
+    OperatorProofError,
+    Started,
+    poll_until_decided,
+    rendezvous,
+    start_enrollment,
+)
+from airdress_home.sensitive import SENSITIVE_CANDIDATE_DOMAINS
+import probatio
+
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.const import CONF_ADDRESS
+from homeassistant.core import callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
+
+from . import AirdressConfigEntry
+from .const import (
+    CONF_KID,
+    CONF_MACHINE_ID,
+    CONF_MACHINE_KEY,
+    CONF_OBSERVE,
+    CONF_OPERATE,
+    CONF_OPERATOR,
+    CONF_OPERATOR_KEY,
+    CONF_PREAUTH_KEY,
+    CONF_SENSITIVE,
+    DOMAIN,
+    LOGGER,
+    MACHINE_NAME_MAX,
+)
+from .sensitive import entity_is_sensitive
+
+_NETWORK_ERRORS = (aiohttp.ClientError, TimeoutError)
+
+
+def _origin(address: str) -> str:
+    """An airdress's address, as the bare ``https`` origin enrollment needs."""
+    address = address.strip()
+    if "://" not in address:
+        address = f"https://{address}"
+    return rendezvous.check_origin(address)
+
+
+def _enroll_error(err: EnrollmentError) -> str:
+    """The translated reason for an enrollment the operator refused."""
+    if err.code == "not_enabled":
+        return "not_enabled"
+    if err.code in {"access_denied", "grant_template_invalid"}:
+        return "invalid_preauth_key"
+    if err.code == "slow_down":
+        return "busy"
+    return "enroll_refused"
+
+
+class AirdressConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Link Home Assistant to an airdress."""
+
+    VERSION = 1
+
+    def __init__(self) -> None:
+        """Initialize the flow."""
+        self._key = MachineKey.generate()
+        self._link: rendezvous.LinkStarted | None = None
+        self._link_task: asyncio.Task[str] | None = None
+        self._origin: str | None = None
+        self._started: Started | None = None
+        self._approve_task: asyncio.Task[Enrollment] | None = None
+        self._enrollment: Enrollment | None = None
+        self._abort_reason = "unknown"
+
+    @staticmethod
+    @callback
+    @override
+    def async_get_options_flow(config_entry: AirdressConfigEntry) -> OptionsFlow:
+        """Choose what Airdress may reach."""
+        return AirdressOptionsFlow()
+
+    @callback
+    @override
+    def async_remove(self) -> None:
+        """Stop waiting when the flow is abandoned."""
+        for task in (self._link_task, self._approve_task):
+            if task is not None and not task.done():
+                task.cancel()
+
+    @property
+    def _machine_name(self) -> str:
+        return f"Home Assistant ({self.hass.config.location_name})"[:MACHINE_NAME_MAX]
+
+    @override
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Offer the ways to find the owner's operator."""
+        return self.async_show_menu(
+            step_id="user", menu_options=["link", "address", "preauth"]
+        )
+
+    async def async_step_link(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Sign in with Airdress: the hub introduces this installation."""
+        http = async_get_clientsession(self.hass)
+        if self._link is None:
+            try:
+                self._link = await rendezvous.start(http, client_name="Home Assistant")
+            except (EnrollmentError, *_NETWORK_ERRORS):
+                LOGGER.debug("The hub did not start a link", exc_info=True)
+                return self.async_abort(reason="cannot_connect_hub")
+            self._link_task = self.hass.async_create_task(
+                rendezvous.poll(http, self._link)
+            )
+        assert self._link_task is not None
+        if not self._link_task.done():
+            return self.async_show_progress(
+                step_id="link",
+                progress_action="link",
+                description_placeholders={
+                    "url": self._link.verification_uri_complete
+                    or self._link.verification_uri,
+                    "code": self._link.user_code,
+                },
+                progress_task=self._link_task,
+            )
+        try:
+            self._origin = self._link_task.result()
+        except EnrollmentDenied:
+            self._abort_reason = "link_denied"
+        except EnrollmentExpired:
+            self._abort_reason = "link_expired"
+        except (EnrollmentError, *_NETWORK_ERRORS):
+            self._abort_reason = "cannot_connect_hub"
+        else:
+            return self.async_show_progress_done(next_step_id="enroll")
+        return self.async_show_progress_done(next_step_id="failed")
+
+    async def async_step_enroll(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Enroll with the operator the hub introduced."""
+        assert self._origin is not None and self._link is not None
+        await self.async_set_unique_id(self._origin)
+        self._abort_if_unique_id_configured()
+        http = async_get_clientsession(self.hass)
+        if (reason := await self._async_start(self._origin, None)) is not None:
+            return self.async_abort(reason=reason)
+        assert self._started is not None
+        try:
+            await rendezvous.enrolled(http, self._link, self._started.user_code)
+        except (EnrollmentError, *_NETWORK_ERRORS):
+            # The owner's browser is not sent on by the hub; the approve link
+            # shown next still works.
+            LOGGER.debug("The hub was not told of the enrollment", exc_info=True)
+        return await self.async_step_approve()
+
+    async def async_step_address(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Link by the airdress's address."""
+        return await self._async_address_step("address", user_input)
+
+    async def async_step_preauth(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Link with a pre-auth key the owner created on the operator."""
+        return await self._async_address_step("preauth", user_input)
+
+    async def _async_address_step(
+        self, step_id: str, user_input: dict[str, Any] | None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                origin = _origin(user_input[CONF_ADDRESS])
+            except EnrollmentError:
+                errors[CONF_ADDRESS] = "invalid_address"
+            else:
+                await self.async_set_unique_id(origin)
+                self._abort_if_unique_id_configured()
+                reason = await self._async_start(
+                    origin, user_input.get(CONF_PREAUTH_KEY)
+                )
+                if reason is None:
+                    self._origin = origin
+                    return await self.async_step_approve()
+                errors["base"] = reason
+        schema: dict[Any, Any] = {
+            probatio.Required(CONF_ADDRESS): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.URL)
+            )
+        }
+        if step_id == "preauth":
+            schema[probatio.Required(CONF_PREAUTH_KEY)] = TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            )
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(
+                probatio.Schema(schema), user_input
+            ),
+            errors=errors,
+        )
+
+    async def _async_start(self, origin: str, preauth_key: str | None) -> str | None:
+        """Ask the operator to enroll this installation; the reason if it did not."""
+        try:
+            self._started = await start_enrollment(
+                async_get_clientsession(self.hass),
+                origin,
+                self._key,
+                self._machine_name,
+                preauth_key=preauth_key,
+                require_proof=True,
+            )
+        except OperatorProofError:
+            return "operator_proof"
+        except EnrollmentError as err:
+            return _enroll_error(err)
+        except _NETWORK_ERRORS:
+            return "cannot_connect"
+        return None
+
+    async def async_step_approve(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Wait while the owner compares the code and approves on the operator."""
+        assert self._started is not None and self._origin is not None
+        if self._approve_task is None:
+            self._approve_task = self.hass.async_create_task(
+                poll_until_decided(
+                    async_get_clientsession(self.hass),
+                    self._origin,
+                    self._key,
+                    self._started,
+                ),
+            )
+        if not self._approve_task.done():
+            started = self._started
+            return self.async_show_progress(
+                step_id="approve",
+                progress_action="approve",
+                description_placeholders={
+                    "url": started.verification_uri_complete
+                    or started.verification_uri
+                    or f"{self._origin}/machines/approve",
+                    "user_code": started.user_code,
+                    "confirmation_code": started.confirmation_code or "",
+                    "fingerprint": started.fingerprint,
+                },
+                progress_task=self._approve_task,
+            )
+        try:
+            self._enrollment = self._approve_task.result()
+        except EnrollmentDenied:
+            self._abort_reason = "denied"
+        except EnrollmentExpired:
+            self._abort_reason = "expired"
+        except (EnrollmentError, *_NETWORK_ERRORS):
+            self._abort_reason = "enroll_refused"
+        else:
+            return self.async_show_progress_done(next_step_id="finish")
+        return self.async_show_progress_done(next_step_id="failed")
+
+    async def async_step_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Create the entry for the approved enrollment."""
+        enrollment = self._enrollment
+        assert enrollment is not None
+        return self.async_create_entry(
+            title=urlsplit(enrollment.operator).hostname or enrollment.operator,
+            data={
+                CONF_OPERATOR: enrollment.operator,
+                CONF_MACHINE_ID: enrollment.machine_id,
+                CONF_KID: enrollment.kid,
+                CONF_OPERATOR_KEY: enrollment.operator_key,
+                CONF_MACHINE_KEY: self._key.seed_b64(),
+            },
+            options={CONF_OPERATE: [], CONF_OBSERVE: [], CONF_SENSITIVE: []},
+        )
+
+    async def async_step_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """End a flow whose rendezvous or approval did not complete."""
+        return self.async_abort(reason=self._abort_reason)
+
+
+class AirdressOptionsFlow(OptionsFlow):
+    """Choose which entities Airdress may observe and operate.
+
+    Operate implies observe. A sensitive entity — a lock, an alarm panel, or a
+    garage door, door, gate, window or unclassified cover — is operated only if
+    it is also allowed in the second step, whatever the operator allows.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the options flow."""
+        self._levels: dict[str, list[str]] = {}
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the entities at each level."""
+        if user_input is not None:
+            self._levels = {
+                CONF_OPERATE: list(user_input.get(CONF_OPERATE, [])),
+                CONF_OBSERVE: list(user_input.get(CONF_OBSERVE, [])),
+            }
+            if self._sensitive_candidates():
+                return await self.async_step_sensitive()
+            return self.async_create_entry(data={**self._levels, CONF_SENSITIVE: []})
+        schema = probatio.Schema(
+            {
+                probatio.Optional(CONF_OPERATE): EntitySelector(
+                    EntitySelectorConfig(multiple=True)
+                ),
+                probatio.Optional(CONF_OBSERVE): EntitySelector(
+                    EntitySelectorConfig(multiple=True)
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, dict(self.config_entry.options)
+            ),
+        )
+
+    def _sensitive_candidates(self) -> list[str]:
+        return [
+            entity_id
+            for entity_id in self._levels[CONF_OPERATE]
+            if entity_id.split(".", 1)[0] in SENSITIVE_CANDIDATE_DOMAINS
+            and entity_is_sensitive(self.hass, entity_id)
+        ]
+
+    async def async_step_sensitive(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Allow sensitive entities to be operated, one by one; none by default."""
+        candidates = self._sensitive_candidates()
+        if user_input is not None:
+            allowed = [e for e in user_input.get(CONF_SENSITIVE, []) if e in candidates]
+            return self.async_create_entry(
+                data={**self._levels, CONF_SENSITIVE: allowed}
+            )
+        current = [
+            e
+            for e in self.config_entry.options.get(CONF_SENSITIVE, [])
+            if e in candidates
+        ]
+        schema = probatio.Schema(
+            {
+                probatio.Optional(CONF_SENSITIVE): EntitySelector(
+                    EntitySelectorConfig(multiple=True, include_entities=candidates)
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="sensitive",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, {CONF_SENSITIVE: current}
+            ),
+            description_placeholders={"count": str(len(candidates))},
+        )

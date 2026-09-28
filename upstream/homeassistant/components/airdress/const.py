@@ -1,0 +1,47 @@
+"""Constants for the Airdress integration."""
+
+import logging
+from typing import Final
+
+DOMAIN: Final = "airdress"
+LOGGER = logging.getLogger(__package__)
+
+CONF_OPERATOR: Final = "operator"
+"""The operator's ``https`` origin."""
+CONF_MACHINE_ID: Final = "machine_id"
+CONF_KID: Final = "kid"
+CONF_MACHINE_KEY: Final = "machine_key"
+"""This installation's Ed25519 seed. Secret; it is in every backup."""
+CONF_OPERATOR_KEY: Final = "operator_key"
+"""The operator key pinned at enrollment; every operator frame verifies under it."""
+CONF_USER_ID: Final = "user_id"
+"""The system user every action Airdress runs is attributed to."""
+CONF_PREAUTH_KEY: Final = "preauth_key"
+
+CONF_OPERATE: Final = "operate"
+CONF_OBSERVE: Final = "observe"
+CONF_SENSITIVE: Final = "sensitive"
+"""Sensitive entities this installation allows Airdress to operate."""
+
+EVENT_OPERATE: Final = "airdress_operate"
+"""Fired before every action Airdress runs, for the logbook."""
+
+SYSTEM_USER_NAME: Final = "Airdress"
+MACHINE_NAME_MAX: Final = 64
+CALL_TIMEOUT: Final = 10.0
+"""Seconds an action may take before its call is answered as failed."""
+
+
+def signal_connection(entry_id: str) -> str:
+    """The dispatcher signal for a change of the channel's state."""
+    return f"{DOMAIN}_{entry_id}_connection"
+
+
+def signal_features(entry_id: str) -> str:
+    """The dispatcher signal for what the operator declared."""
+    return f"{DOMAIN}_{entry_id}_features"
+
+
+def signal_emit(entry_id: str) -> str:
+    """The dispatcher signal for an event the operator emitted."""
+    return f"{DOMAIN}_{entry_id}_emit"
