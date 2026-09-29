@@ -20,7 +20,10 @@ from homeassistant.util import dt as dt_util
 
 from .conftest import MACHINE_ID, FakeChannel
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 ENTITY = "notify.home_test_a_airdr_es_home_conversation"
 
