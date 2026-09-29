@@ -49,6 +49,10 @@
         },
         "title": "Mit einem Pre-Auth-Schlüssel verknüpfen"
       },
+      "reauth_confirm": {
+        "description": "Dein Operator unter {operator} akzeptiert dieses Home Assistant nicht mehr. Ist seine Freigabe abgelaufen, bittet Home Assistant erneut darum und bleibt verknüpft wie bisher. Wurde es widerrufen, registriert sich Home Assistant als neue Maschine, die du freigibst und erneut verknüpfst. Was du teilst, bleibt erhalten.",
+        "title": "Authentifizierung für {name} abgelaufen"
+      },
       "user": {
         "description": "Verknüpfe Home Assistant mit deiner Airdress, damit deine Funktionen die Aktionen ausführen und die Entitäten lesen können, die du freigibst. Nichts wird geteilt, bevor du es in den Optionen auswählst.",
         "menu_options": {
@@ -56,6 +60,13 @@
           "link": "Mit Airdress anmelden",
           "preauth": "Pre-Auth-Schlüssel verwenden"
         }
+      }
+    }
+  },
+  "entity": {
+    "notify": {
+      "conversation": {
+        "name": "Home-Unterhaltung"
       }
     }
   },
@@ -74,6 +85,24 @@
     },
     "not_linked": {
       "message": "Dein Operator kennt dieses Home Assistant, hat es aber noch nicht als Zuhause verknüpft."
+    },
+    "notify_disabled": {
+      "message": "Nachrichten von Home Assistant sind in Airdress ausgeschaltet."
+    },
+    "notify_failed": {
+      "message": "Der Operator deiner Airdress konnte die Nachricht nicht speichern."
+    },
+    "notify_not_connected": {
+      "message": "Der Operator deiner Airdress ist nicht verbunden, daher wurde die Nachricht nicht gesendet."
+    },
+    "notify_rate_limited": {
+      "message": "Deine Airdress nimmt vorerst keine weiteren Nachrichten von Home Assistant an. Sie nimmt einige pro Minute und ein paar hundert pro Tag an."
+    },
+    "notify_rejected": {
+      "message": "Airdress hat eine leere Nachricht abgelehnt."
+    },
+    "notify_too_long": {
+      "message": "Die Nachricht ist zu lang für Airdress: höchstens 1.000 Zeichen, einschließlich des Titels."
     }
   },
   "options": {
@@ -88,6 +117,24 @@
           "operate": "Deine Funktionen können ihre Aktionen ausführen und ihren Zustand lesen."
         },
         "description": "Wähle, was die Funktionen deiner Airdress erreichen können. Alles andere bleibt für sie unsichtbar."
+      },
+      "location": {
+        "data": {
+          "record_location": "Einen Verlauf deiner Koordinaten speichern"
+        },
+        "data_description": {
+          "record_location": "Aus: Der Verlauf von Home Assistant enthält nur zu Hause, unterwegs oder die Zone, nie, wo genau du warst."
+        },
+        "description": "Die Funktionen deiner Airdress können auf {trackers} anzeigen, wo du bist. Home Assistant speichert immer einen Verlauf darüber, ob du zu Hause, unterwegs oder in einer seiner Zonen bist. Um auch das auszuschließen, nimm den Tracker in den Recorder-Einstellungen von Home Assistant aus.",
+        "title": "Dein Standort in Home Assistant"
+      },
+      "location_confirm": {
+        "description": "Home Assistant speichert deine Koordinaten für die Dauer seines Verlaufs (10 Tage, sofern du das nicht geändert hast). Sie sind in jeder Sicherung enthalten, und alles in Home Assistant, das den Verlauf liest, kann sie sehen. Koordinaten, die gespeichert wurden, bevor du das wieder ausschaltest, bleiben bis zum Ende der Verlaufsdauer erhalten.",
+        "menu_options": {
+          "location": "Zurück",
+          "location_record": "Meine Koordinaten speichern"
+        },
+        "title": "Deine Koordinaten speichern?"
       },
       "sensitive": {
         "data": {
