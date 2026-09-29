@@ -12,6 +12,7 @@ password or token is entered. The operator is found one of three ways:
 """
 
 import asyncio
+from collections.abc import Mapping
 from typing import Any, override
 from urllib.parse import urlsplit
 
@@ -21,21 +22,31 @@ from airdress_home import (
     EnrollmentDenied,
     EnrollmentError,
     EnrollmentExpired,
+    MachineClient,
     MachineKey,
+    NotAuthorized,
     OperatorProofError,
     Started,
     poll_until_decided,
     rendezvous,
     start_enrollment,
+    start_reauth,
 )
 from airdress_home.sensitive import SENSITIVE_CANDIDATE_DOMAINS
 import probatio
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.config_entries import (
+    SOURCE_REAUTH,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.const import CONF_ADDRESS, Platform
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     TextSelector,
@@ -53,10 +64,12 @@ from .const import (
     CONF_OPERATOR,
     CONF_OPERATOR_KEY,
     CONF_PREAUTH_KEY,
+    CONF_RECORD_LOCATION,
     CONF_SENSITIVE,
     DOMAIN,
     LOGGER,
     MACHINE_NAME_MAX,
+    REAUTH_REFUSAL,
 )
 from .sensitive import entity_is_sensitive
 
@@ -97,6 +110,7 @@ class AirdressConfigFlow(ConfigFlow, domain=DOMAIN):
         self._approve_task: asyncio.Task[Enrollment] | None = None
         self._enrollment: Enrollment | None = None
         self._abort_reason = "unknown"
+        self._refusal: str | None = None
 
     @staticmethod
     @callback
@@ -291,12 +305,90 @@ class AirdressConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_show_progress_done(next_step_id="finish")
         return self.async_show_progress_done(next_step_id="failed")
 
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """The operator no longer accepts this installation's machine."""
+        self._refusal = entry_data.get(REAUTH_REFUSAL)
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask the operator to approve this installation again.
+
+        A lapsed approval is renewed for the same machine, which keeps what it
+        is linked as. A revoked machine cannot be renewed: Home Assistant then
+        enrolls as a new machine, which the owner approves and links again.
+        """
+        entry = self._get_reauth_entry()
+        origin = str(entry.data[CONF_OPERATOR])
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            # A revoked machine cannot be renewed; anything else is asked to
+            # be, and the operator's answer decides.
+            reason = (
+                "revoked"
+                if self._refusal == "revoked"
+                else await self._async_renew(entry)
+            )
+            if reason == "revoked":
+                self._key = MachineKey.generate()
+                reason = await self._async_start(origin, None)
+            if reason is None:
+                self._origin = origin
+                return await self.async_step_approve()
+            errors["base"] = reason
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            description_placeholders={"operator": urlsplit(origin).hostname or origin},
+            errors=errors,
+        )
+
+    async def _async_renew(self, entry: AirdressConfigEntry) -> str | None:
+        """Start renewing the entry's machine; why not, or ``None``."""
+        key = MachineKey.from_b64(entry.data[CONF_MACHINE_KEY])
+        client = MachineClient(
+            async_get_clientsession(self.hass),
+            key,
+            Enrollment(
+                operator=entry.data[CONF_OPERATOR],
+                machine_id=entry.data[CONF_MACHINE_ID],
+                kid=entry.data[CONF_KID],
+                operator_key=entry.data[CONF_OPERATOR_KEY],
+            ),
+        )
+        try:
+            self._started = await start_reauth(client)
+        except NotAuthorized:
+            return "revoked"
+        except OperatorProofError:
+            return "operator_proof"
+        except EnrollmentError as err:
+            return _enroll_error(err)
+        except _NETWORK_ERRORS:
+            return "cannot_connect"
+        self._key = key
+        return None
+
     async def async_step_finish(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Create the entry for the approved enrollment."""
         enrollment = self._enrollment
         assert enrollment is not None
+        if self.source == SOURCE_REAUTH:
+            # The same machine renewed, or a new one for the same operator;
+            # what is shared is kept either way.
+            return self.async_update_reload_and_abort(
+                self._get_reauth_entry(),
+                data_updates={
+                    CONF_MACHINE_ID: enrollment.machine_id,
+                    CONF_KID: enrollment.kid,
+                    CONF_OPERATOR_KEY: enrollment.operator_key,
+                    CONF_MACHINE_KEY: self._key.seed_b64(),
+                },
+            )
         return self.async_create_entry(
             title=urlsplit(enrollment.operator).hostname or enrollment.operator,
             data={
@@ -322,11 +414,16 @@ class AirdressOptionsFlow(OptionsFlow):
     Operate implies observe. A sensitive entity — a lock, an alarm panel, or a
     garage door, door, gate, window or unclassified cover — is operated only if
     it is also allowed in the second step, whatever the operator allows.
+
+    Once the operator declared a tracker for the owner, a last step asks whether
+    Home Assistant keeps a history of the owner's coordinates: no by default,
+    and yes only after a confirmation that says what that means.
     """
 
     def __init__(self) -> None:
         """Initialize the options flow."""
         self._levels: dict[str, list[str]] = {}
+        self._sensitive: list[str] = []
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -339,7 +436,7 @@ class AirdressOptionsFlow(OptionsFlow):
             }
             if self._sensitive_candidates():
                 return await self.async_step_sensitive()
-            return self.async_create_entry(data={**self._levels, CONF_SENSITIVE: []})
+            return await self._async_after_sharing()
         schema = probatio.Schema(
             {
                 probatio.Optional(CONF_OPERATE): EntitySelector(
@@ -371,10 +468,10 @@ class AirdressOptionsFlow(OptionsFlow):
         """Allow sensitive entities to be operated, one by one; none by default."""
         candidates = self._sensitive_candidates()
         if user_input is not None:
-            allowed = [e for e in user_input.get(CONF_SENSITIVE, []) if e in candidates]
-            return self.async_create_entry(
-                data={**self._levels, CONF_SENSITIVE: allowed}
-            )
+            self._sensitive = [
+                e for e in user_input.get(CONF_SENSITIVE, []) if e in candidates
+            ]
+            return await self._async_after_sharing()
         current = [
             e
             for e in self.config_entry.options.get(CONF_SENSITIVE, [])
@@ -394,3 +491,68 @@ class AirdressOptionsFlow(OptionsFlow):
             ),
             description_placeholders={"count": str(len(candidates))},
         )
+
+    def _trackers(self) -> list[str]:
+        """The owner's trackers this entry has, by entity id."""
+        return sorted(
+            reg.entity_id
+            for reg in er.async_entries_for_config_entry(
+                er.async_get(self.hass), self.config_entry.entry_id
+            )
+            if reg.domain == Platform.DEVICE_TRACKER
+        )
+
+    def _create(self, record_location: bool) -> ConfigFlowResult:
+        return self.async_create_entry(
+            data={
+                **self._levels,
+                CONF_SENSITIVE: self._sensitive,
+                CONF_RECORD_LOCATION: record_location,
+            }
+        )
+
+    async def _async_after_sharing(self) -> ConfigFlowResult:
+        if self._trackers():
+            return await self.async_step_location()
+        return self._create(
+            bool(self.config_entry.options.get(CONF_RECORD_LOCATION, False))
+        )
+
+    async def async_step_location(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask whether to keep a history of the owner's location; no by default."""
+        if user_input is not None:
+            if user_input.get(CONF_RECORD_LOCATION, False):
+                return await self.async_step_location_confirm()
+            return self._create(False)
+        schema = probatio.Schema(
+            {probatio.Optional(CONF_RECORD_LOCATION): BooleanSelector()}
+        )
+        return self.async_show_form(
+            step_id="location",
+            data_schema=self.add_suggested_values_to_schema(
+                schema,
+                {
+                    CONF_RECORD_LOCATION: bool(
+                        self.config_entry.options.get(CONF_RECORD_LOCATION, False)
+                    )
+                },
+            ),
+            description_placeholders={"trackers": ", ".join(self._trackers())},
+        )
+
+    async def async_step_location_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Say what keeping the coordinates means, then continue or go back."""
+        return self.async_show_menu(
+            step_id="location_confirm",
+            menu_options=["location_record", "location"],
+        )
+
+    async def async_step_location_record(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Keep the coordinates, confirmed."""
+        return self._create(True)

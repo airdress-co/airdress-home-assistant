@@ -1,5 +1,5 @@
 The Home Assistant core files this mirror is generated from.
 branch: airdress-integration
-commit: 5fa5254d155983ebb23b15251e48b4f4da059eb8
-committed: 2026-09-28T10:00:47+02:00
-subject: Airdress: follow the operator's frames
+commit: 00cfe612465e5a7dbfacb235957a995097c22d55
+committed: 2026-09-29T09:29:10+02:00
+subject: Airdress: entities stay available through the operator's hourly re-dial

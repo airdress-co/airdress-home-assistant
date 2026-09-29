@@ -1,13 +1,16 @@
 """Test the events the operator's functions emit."""
 
+from datetime import timedelta
+
 from homeassistant.components.event import ATTR_EVENT_TYPE, ATTR_EVENT_TYPES
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
 from .conftest import MACHINE_ID, FakeChannel
 
-from tests.common import MockConfigEntry
+from tests.common import MockConfigEntry, async_fire_time_changed
 
 ENTITY = "event.home_test_a_airdr_es_arrived"
 
@@ -99,6 +102,8 @@ async def test_events_are_unavailable_while_disconnected_and_restored(
         "event", "airdress", "not-an-event", config_entry=init_integration
     )
     channel.abort()
+    await hass.async_block_till_done()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=11))
     await hass.async_block_till_done()
     state = hass.states.get(ENTITY)
     assert state is not None and state.state == STATE_UNAVAILABLE

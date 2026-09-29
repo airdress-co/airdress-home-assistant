@@ -23,6 +23,16 @@ CONF_OPERATE: Final = "operate"
 CONF_OBSERVE: Final = "observe"
 CONF_SENSITIVE: Final = "sensitive"
 """Sensitive entities this installation allows Airdress to operate."""
+CONF_RECORD_LOCATION: Final = "record_location"
+
+# How long entities stay available after the channel drops: the operator ends
+# every channel after an hour and the hub is back within about a second.
+AVAILABILITY_GRACE: Final = 10.0
+
+# Why the operator refused the machine, handed to the reauth flow: the
+# library's ``revoked`` or ``lapsed``.
+REAUTH_REFUSAL: Final = "refusal"
+"""Whether the recorder keeps the owner's coordinates; off unless confirmed."""
 
 EVENT_OPERATE: Final = "airdress_operate"
 """Fired before every action Airdress runs, for the logbook."""
@@ -46,3 +56,8 @@ def signal_features(entry_id: str) -> str:
 def signal_emit(entry_id: str) -> str:
     """The dispatcher signal for an event the operator emitted."""
     return f"{DOMAIN}_{entry_id}_emit"
+
+
+def signal_track(entry_id: str) -> str:
+    """The dispatcher signal for a position of the owner's tracker."""
+    return f"{DOMAIN}_{entry_id}_track"

@@ -9,24 +9,38 @@ which is not an administrator.
 """
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from airdress_home import Features, Shared, SharedEntity, Track, models as outcome
 import probatio
 
 from homeassistant.const import ATTR_ENTITY_ID, __version__ as HA_VERSION
-from homeassistant.core import Context, HomeAssistant, callback, split_entity_id
+from homeassistant.core import (
+    CALLBACK_TYPE,
+    Context,
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    State,
+    callback,
+    split_entity_id,
+)
 from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceNotFound,
     ServiceValidationError,
     Unauthorized,
 )
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_call_later, async_track_state_change_event
+from homeassistant.helpers.json import json_bytes
 from homeassistant.loader import async_get_loaded_integration
 from homeassistant.util import slugify
+from homeassistant.util.json import json_loads
 
 from .const import (
+    AVAILABILITY_GRACE,
     CALL_TIMEOUT,
     CONF_OBSERVE,
     CONF_OPERATE,
@@ -37,8 +51,12 @@ from .const import (
     signal_connection,
     signal_emit,
     signal_features,
+    signal_track,
 )
 from .sensitive import device_class_of, entity_is_sensitive
+
+if TYPE_CHECKING:
+    from airdress_home import HomeSession
 
 TARGET_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
 """Keys that would address something other than the call's own targets."""
@@ -62,7 +80,20 @@ class AirdressHub:
         self.hass = hass
         self.entry_id = entry_id
         self.user_id = user_id
+        self._session: HomeSession | None = None
+        self._wanted: dict[str, tuple[str, ...]] = {}
+        """What the operator asked to have streamed: entity -> attributes."""
+        self._unsubscribe: CALLBACK_TYPE | None = None
+        self._streaming: frozenset[str] = frozenset()
+        self.available = False
+        """Whether entities are available: the channel is up, or went down
+        less than :data:`AVAILABILITY_GRACE` seconds ago."""
+        self._unavailable_later: CALLBACK_TYPE | None = None
         self.update_options(options)
+
+    def attach(self, session: HomeSession) -> None:
+        """The session observed entities are streamed on."""
+        self._session = session
 
     @callback
     def update_options(self, options: dict[str, Any]) -> None:
@@ -74,6 +105,71 @@ class AirdressHub:
         self.sensitive_allowed: frozenset[str] = frozenset(
             options.get(CONF_SENSITIVE, [])
         )
+        self._async_update_observing()
+
+    @callback
+    def _async_update_observing(self) -> None:
+        """Stream exactly the entities the operator asked for and the user shares."""
+        streaming = frozenset(e for e in self._wanted if self._observable(e))
+        if streaming == self._streaming:
+            return
+        self.async_stop_observing()
+        self._streaming = streaming
+        if streaming:
+            self._unsubscribe = async_track_state_change_event(
+                self.hass, sorted(streaming), self._async_state_changed
+            )
+
+    @callback
+    def async_stop_observing(self) -> None:
+        """Stop streaming."""
+        if self._unsubscribe is not None:
+            self._unsubscribe()
+            self._unsubscribe = None
+        self._streaming = frozenset()
+
+    def _frame_state(self, state: State) -> dict[str, Any]:
+        """A state as the operator receives it: only the attributes it keeps."""
+        keep = self._wanted.get(state.entity_id, ())
+        attributes = {k: v for k, v in state.attributes.items() if k in keep}
+        return {
+            "state": state.state,
+            # Through Home Assistant's encoder, so every value is plain JSON.
+            "attributes": json_loads(json_bytes(attributes)),
+            "lastChanged": state.last_changed.isoformat(),
+        }
+
+    @callback
+    def _async_state_changed(self, event: Event[EventStateChangedData]) -> None:
+        """An observed entity changed; the operator keeps the newest per entity."""
+        session, new = self._session, event.data["new_state"]
+        entity_id = event.data["entity_id"]
+        if session is None or new is None or entity_id not in self._streaming:
+            return
+        old = event.data["old_state"]
+        self.hass.async_create_background_task(
+            session.send_state(
+                entity_id,
+                self._frame_state(new),
+                None if old is None else self._frame_state(old),
+            ),
+            f"airdress observe {entity_id}",
+        )
+
+    def _own(self, entity_id: str) -> bool:
+        """Whether Airdress itself created the entity, such as the owner's tracker.
+
+        Its own entities are never shared back: observing the tracker would
+        echo the owner's location to the operator that sent it.
+        """
+        entry = er.async_get(self.hass).async_get(entity_id)
+        return entry is not None and entry.platform == DOMAIN
+
+    def _operable(self, entity_id: str) -> bool:
+        return entity_id in self.operate and not self._own(entity_id)
+
+    def _observable(self, entity_id: str) -> bool:
+        return entity_id in self.observe and not self._own(entity_id)
 
     def _shared_entity(self, entity_id: str) -> SharedEntity:
         return SharedEntity(entity_id, device_class_of(self.hass, entity_id))
@@ -85,8 +181,16 @@ class AirdressHub:
                 async_get_loaded_integration(self.hass, DOMAIN).version or HA_VERSION
             ),
             hub_version=HA_VERSION,
-            operate=tuple(self._shared_entity(e) for e in sorted(self.operate)),
-            observe=tuple(self._shared_entity(e) for e in sorted(self.observe)),
+            operate=tuple(
+                self._shared_entity(e)
+                for e in sorted(self.operate)
+                if self._operable(e)
+            ),
+            observe=tuple(
+                self._shared_entity(e)
+                for e in sorted(self.observe)
+                if self._observable(e)
+            ),
         )
 
     @callback
@@ -96,19 +200,66 @@ class AirdressHub:
         self.hass.config_entries.async_schedule_reload(self.entry_id)
 
     @callback
+    def lapsed(self) -> None:
+        """The owner's approval of this installation lapsed; reloading reports it."""
+        LOGGER.warning(
+            "The Airdress operator's approval of this Home Assistant has lapsed"
+        )
+        self.hass.config_entries.async_schedule_reload(self.entry_id)
+
+    @callback
     def connection_changed(self, up: bool) -> None:
-        """The channel came up or went down."""
+        """The channel came up or went down.
+
+        The operator ends every channel after an hour and the hub dials again
+        at once: a planned re-dial, over in about a second. Entities stay
+        available through it; they become unavailable only when the channel
+        stays down for :data:`AVAILABILITY_GRACE` seconds.
+        """
         if up:
             LOGGER.info("Connected to the Airdress operator")
-        else:
-            LOGGER.info("Disconnected from the Airdress operator; reconnecting")
-        async_dispatcher_send(self.hass, signal_connection(self.entry_id), up)
+            self._cancel_unavailable()
+            self._set_available(True)
+            return
+        LOGGER.info("Disconnected from the Airdress operator; reconnecting")
+        if self.available and self._unavailable_later is None:
+            self._unavailable_later = async_call_later(
+                self.hass, AVAILABILITY_GRACE, self._async_still_down
+            )
+
+    @callback
+    def _async_still_down(self, _now: Any) -> None:
+        self._unavailable_later = None
+        self._set_available(False)
+
+    @callback
+    def _cancel_unavailable(self) -> None:
+        if self._unavailable_later is not None:
+            self._unavailable_later()
+            self._unavailable_later = None
+
+    @callback
+    def _set_available(self, available: bool) -> None:
+        if available == self.available:
+            return
+        self.available = available
+        async_dispatcher_send(self.hass, signal_connection(self.entry_id), available)
+
+    @callback
+    def async_stop(self) -> None:
+        """The entry is unloading: nothing is scheduled past it."""
+        self._cancel_unavailable()
 
     @callback
     def features(self, features: Features) -> None:
         """The operator declared what its Home offers this installation."""
         if features.dropped:
             LOGGER.debug("The operator declared %s malformed events", features.dropped)
+        self._wanted = {
+            entity: tuple(features.observe_attributes.get(entity, ()))
+            for entity in features.observe
+        }
+        self._async_update_observing()
         async_dispatcher_send(self.hass, signal_features(self.entry_id), features)
 
     @callback
@@ -122,8 +273,8 @@ class AirdressHub:
 
     @callback
     def track(self, track: Track) -> None:
-        """Drop a tracker position: this release has no tracker to move."""
-        LOGGER.debug("Dropped a tracker position: no tracker is set up")
+        """Move the owner's tracker; the tracker platform decides if it knows it."""
+        async_dispatcher_send(self.hass, signal_track(self.entry_id), track)
 
     def _refusal(
         self, action: str, targets: list[str], data: dict[str, Any] | None
@@ -138,7 +289,7 @@ class AirdressHub:
             or any("." not in t for t in targets)
         ):
             return outcome.REJECTED
-        if not all(t in self.operate for t in targets):
+        if not all(self._operable(t) for t in targets):
             return outcome.NOT_EXPOSED
         if any(self.hass.states.get(t) is None for t in targets):
             return outcome.NOT_FOUND
@@ -186,7 +337,7 @@ class AirdressHub:
 
     async def read(self, entity: str) -> tuple[str, str | None, str | None]:
         """Read the state of an entity shared for observing."""
-        if entity not in self.observe:
+        if not self._observable(entity):
             return outcome.NOT_EXPOSED, None, None
         if (state := self.hass.states.get(entity)) is None:
             return outcome.NOT_FOUND, None, None

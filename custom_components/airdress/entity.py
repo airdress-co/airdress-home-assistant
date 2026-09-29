@@ -15,7 +15,11 @@ if TYPE_CHECKING:
 
 
 class AirdressEntity(Entity):
-    """An entity of one linked airdress, available while its channel is up."""
+    """An entity of one linked airdress, available while its channel is up.
+
+    A planned re-dial (the operator ends every channel after an hour) does not
+    make it unavailable: see :meth:`AirdressHub.connection_changed`.
+    """
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -34,8 +38,8 @@ class AirdressEntity(Entity):
     @property
     @override
     def available(self) -> bool:
-        """Whether the channel to the operator is up."""
-        return self._entry.runtime_data.session.connected
+        """Whether the channel to the operator is up, or back within the grace."""
+        return self._entry.runtime_data.hub.available
 
     @override
     async def async_added_to_hass(self) -> None:

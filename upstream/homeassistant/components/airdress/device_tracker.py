@@ -1,0 +1,137 @@
+"""The owner's position, as the operator's functions report it.
+
+The operator's ``Home`` declares its trackers; each becomes a tracker here, and
+a function holding the owner's location (with the owner's consent to send it
+to this home) moves it.
+
+**Home Assistant's recorder keeps no coordinates by default.** Whether an
+entity is recorded at all is the user's recorder configuration, which an
+integration cannot change; which attributes are recorded is the platform
+class's. So there are two classes, chosen by the entry's recording option:
+the default leaves out the coordinates and zones, so history holds only home,
+away or the zone; the other, chosen with a confirmation, records them.
+"""
+
+from airdress_home import Features, Track
+
+from homeassistant.components.device_tracker import (
+    ATTR_IN_ZONES,
+    SourceType,
+    TrackerEntity,
+)
+from homeassistant.const import (
+    ATTR_GPS_ACCURACY,
+    ATTR_LATITUDE,
+    ATTR_LONGITUDE,
+    Platform,
+)
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+from . import AirdressConfigEntry
+from .const import (
+    CONF_MACHINE_ID,
+    CONF_RECORD_LOCATION,
+    DOMAIN,
+    LOGGER,
+    signal_features,
+    signal_track,
+)
+from .entity import AirdressEntity
+
+PARALLEL_UPDATES = 0
+
+COORDINATES = frozenset(
+    {ATTR_LATITUDE, ATTR_LONGITUDE, ATTR_GPS_ACCURACY, ATTR_IN_ZONES}
+)
+"""What the default leaves out of the recorder."""
+
+
+def _unique_id(entry: AirdressConfigEntry, name: str) -> str:
+    return f"{entry.data[CONF_MACHINE_ID]}-tracker-{name}"
+
+
+class AirdressTracker(AirdressEntity, TrackerEntity):
+    """The owner's tracker; its coordinates are not recorded."""
+
+    _attr_source_type = SourceType.GPS
+    _unrecorded_attributes = COORDINATES
+
+    def __init__(self, entry: AirdressConfigEntry, name: str) -> None:
+        """Initialize the tracker."""
+        super().__init__(entry)
+        self.tracker = name
+        self._attr_name = name
+        self._attr_unique_id = _unique_id(entry, name)
+
+    @callback
+    def async_track(self, track: Track) -> None:
+        """A function reported the owner's position."""
+        self._attr_latitude = track.lat
+        self._attr_longitude = track.lon
+        self._attr_location_accuracy = track.accuracy_m or 0
+        self.async_write_ha_state()
+
+
+class AirdressRecordedTracker(AirdressTracker):
+    """The owner's tracker, with its coordinates recorded (chosen, confirmed)."""
+
+    _unrecorded_attributes = frozenset()
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: AirdressConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up the trackers the operator declared."""
+    cls = (
+        AirdressRecordedTracker
+        if entry.options.get(CONF_RECORD_LOCATION, False)
+        else AirdressTracker
+    )
+    registry = er.async_get(hass)
+    known: dict[str, AirdressTracker] = {}
+    prefix = f"{entry.data[CONF_MACHINE_ID]}-tracker-"
+
+    # What the operator declared last time, so the tracker exists before the
+    # channel is up.
+    for reg in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if reg.domain == Platform.DEVICE_TRACKER and reg.unique_id.startswith(prefix):
+            name = reg.unique_id.removeprefix(prefix)
+            known[name] = cls(entry, name)
+    async_add_entities(list(known.values()))
+
+    @callback
+    def _async_declared(features: Features) -> None:
+        new = [
+            known.setdefault(name, cls(entry, name))
+            for name in features.trackers
+            if name not in known
+        ]
+        if new:
+            async_add_entities(new)
+        for name in [n for n in known if n not in features.trackers]:
+            known.pop(name)
+            if (
+                entity_id := registry.async_get_entity_id(
+                    Platform.DEVICE_TRACKER, DOMAIN, _unique_id(entry, name)
+                )
+            ) is not None:
+                registry.async_remove(entity_id)
+
+    @callback
+    def _async_tracked(track: Track) -> None:
+        if (entity := known.get(track.tracker)) is None or entity.hass is None:
+            LOGGER.debug("Dropped a position for an undeclared tracker")
+            return
+        entity.async_track(track)
+
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, signal_features(entry.entry_id), _async_declared)
+    )
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, signal_track(entry.entry_id), _async_tracked)
+    )

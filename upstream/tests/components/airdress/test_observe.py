@@ -1,0 +1,122 @@
+"""Test streaming observed entities to the operator."""
+
+from homeassistant.components.airdress.const import (
+    CONF_OBSERVE,
+    CONF_OPERATE,
+    CONF_SENSITIVE,
+)
+from homeassistant.core import HomeAssistant
+
+from .conftest import FakeChannel
+
+from tests.common import MockConfigEntry
+
+POWER = "sensor.power"
+HIDDEN = "sensor.hidden"
+
+
+async def _want(
+    hass: HomeAssistant, channel: FakeChannel, entities: list[str], attributes: dict
+) -> None:
+    await channel.feed(
+        hass,
+        channel.frames(
+            "features",
+            events=[],
+            notify={"enabled": True},
+            observe=entities,
+            observeAttributes=attributes,
+        ),
+    )
+
+
+async def _share(
+    hass: HomeAssistant, entry: MockConfigEntry, observe: list[str]
+) -> None:
+    hass.config_entries.async_update_entry(
+        entry, options={CONF_OPERATE: [], CONF_OBSERVE: observe, CONF_SENSITIVE: []}
+    )
+    await hass.async_block_till_done()
+
+
+async def _change(hass: HomeAssistant, entity: str, value: str) -> None:
+    hass.states.async_set(
+        entity, value, {"unit_of_measurement": "W", "friendly_name": "Private name"}
+    )
+    await hass.async_block_till_done()
+
+
+async def test_a_shared_and_wanted_entity_is_streamed_with_only_kept_attributes(
+    hass: HomeAssistant, init_integration: MockConfigEntry, channel: FakeChannel
+) -> None:
+    """Only what the user shares and the operator asked for, attributes filtered."""
+    await _change(hass, POWER, "10")
+    await _change(hass, HIDDEN, "1")
+    await _share(hass, init_integration, [POWER])
+    await _want(
+        hass, channel, [POWER, HIDDEN], {POWER: ["unit_of_measurement"], HIDDEN: []}
+    )
+
+    await _change(hass, POWER, "12")
+    await _change(hass, HIDDEN, "2")
+    (frame,) = channel.sent_of("state")
+    assert frame["entity"] == POWER
+    assert frame["newState"]["state"] == "12"
+    assert frame["newState"]["attributes"] == {"unit_of_measurement": "W"}
+    assert frame["newState"]["lastChanged"]
+    assert frame["oldState"]["state"] == "10"
+
+
+async def test_nothing_is_streamed_unless_the_operator_asks(
+    hass: HomeAssistant, init_integration: MockConfigEntry, channel: FakeChannel
+) -> None:
+    """Shared at observe is not enough: the Home must declare it."""
+    await _share(hass, init_integration, [POWER])
+    await _want(hass, channel, [], {})
+    await _change(hass, POWER, "12")
+    assert channel.sent_of("state") == []
+
+
+async def test_unsharing_or_withdrawing_stops_the_stream(
+    hass: HomeAssistant, init_integration: MockConfigEntry, channel: FakeChannel
+) -> None:
+    """Either side ends it."""
+    await _share(hass, init_integration, [POWER])
+    await _want(hass, channel, [POWER], {POWER: []})
+    await _change(hass, POWER, "1")
+    assert len(channel.sent_of("state")) == 1
+
+    await _share(hass, init_integration, [])
+    await _change(hass, POWER, "2")
+    assert len(channel.sent_of("state")) == 1
+
+    await _share(hass, init_integration, [POWER])
+    await _change(hass, POWER, "3")
+    assert len(channel.sent_of("state")) == 2
+
+    await _want(hass, channel, [], {})
+    await _change(hass, POWER, "4")
+    assert len(channel.sent_of("state")) == 2
+
+
+async def test_a_removed_entity_is_not_streamed(
+    hass: HomeAssistant, init_integration: MockConfigEntry, channel: FakeChannel
+) -> None:
+    """A removal has no new state to send."""
+    await _share(hass, init_integration, [POWER])
+    await _want(hass, channel, [POWER], {POWER: []})
+    await _change(hass, POWER, "1")
+    hass.states.async_remove(POWER)
+    await hass.async_block_till_done()
+    assert len(channel.sent_of("state")) == 1
+
+
+async def test_unloading_stops_the_stream(
+    hass: HomeAssistant, init_integration: MockConfigEntry, channel: FakeChannel
+) -> None:
+    """No subscription outlives the entry."""
+    await _share(hass, init_integration, [POWER])
+    await _want(hass, channel, [POWER], {POWER: []})
+    await hass.config_entries.async_unload(init_integration.entry_id)
+    await _change(hass, POWER, "9")
+    assert channel.sent_of("state") == []

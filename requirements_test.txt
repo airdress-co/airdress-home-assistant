@@ -3,6 +3,6 @@ pytest-homeassistant-custom-component==0.13.367
 # The logbook test sets up logbook, which depends on frontend; this is the
 # frontend that Home Assistant release pins.
 home-assistant-frontend==20260826.7
-# The library the manifest pins (overlay/mirror.json). Until that version is on
-# PyPI, CI installs it from the airdress-home commit that release is tagged at.
-airdress-home @ git+https://github.com/airdress-co/airdress-home@536a2d458019170b274a214d34750887fc24c079
+# The library the manifest pins. scripts/generate.py writes this line from
+# overlay/mirror.json and --check fails when it differs; do not edit it here.
+airdress-home==0.1.0b3
