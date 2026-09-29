@@ -55,13 +55,15 @@ repos:
         always_run: true
 
       - id: mypy
-        name: mypy --strict over custom_components/airdress
-        # Type-checks against the Home Assistant release the tests run on, so
-        # it runs in the tests' environment; uv caches it after the first run.
+        name: mypy with core's settings over custom_components/airdress
+        # Core's settings for this integration (pyproject.toml says where each
+        # comes from). Type-checks against the Home Assistant release the
+        # tests run on, so it runs in the tests' environment; uv caches it
+        # after the first run. CI also runs it against Home Assistant dev.
         entry: uv run --quiet --no-project --python 3.14 --with-requirements requirements_test.txt mypy
         language: system
         pass_filenames: false
-        files: ^(custom_components/airdress/.+\.py|pyproject\.toml|requirements_test\.txt)$
+        files: ^(custom_components/airdress/.+\.py|stubs/.+|mypy_plugins/.+|pyproject\.toml|requirements_test\.txt)$
 
       - id: no-internal-refs
         name: no internal document numbers
