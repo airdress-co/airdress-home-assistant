@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+from pathlib import Path
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 UPSTREAM = ROOT / "upstream"
@@ -45,23 +45,33 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 
 def git(core: Path, *args: str) -> str:
+    """Run git in the core checkout and return its output."""
     return subprocess.run(
         ["git", "-C", str(core), *args], check=True, capture_output=True, text=True
     ).stdout.strip()
 
 
 def generate_translations(core: Path) -> None:
+    """Build translations/en.json from strings.json with core's own script."""
     python = core / ".venv" / "bin" / "python"
     if not python.exists():
         sys.exit(f"no core virtualenv at {python}: set one up with core's script/setup")
     subprocess.run(
-        [str(python), "-m", "script.translations", "develop", "--integration", "airdress"],
+        [
+            str(python),
+            "-m",
+            "script.translations",
+            "develop",
+            "--integration",
+            "airdress",
+        ],
         cwd=core,
         check=True,
     )
 
 
 def copy_into(core: Path, dest: Path) -> None:
+    """Copy the files the mirror takes from core into dest."""
     for tree in TREES:
         shutil.copytree(core / tree, dest / tree, ignore=IGNORE)
     for file in FILES:
@@ -74,8 +84,9 @@ def differences(left: Path, right: Path) -> list[str]:
     found: list[str] = []
 
     def walk(cmp: filecmp.dircmp[str], prefix: str) -> None:
-        for name in cmp.left_only + cmp.right_only + cmp.funny_files:
-            found.append(prefix + name)
+        found.extend(
+            prefix + name for name in cmp.left_only + cmp.right_only + cmp.funny_files
+        )
         _, mismatch, errors = filecmp.cmpfiles(
             cmp.left, cmp.right, cmp.common_files, shallow=False
         )
@@ -88,8 +99,11 @@ def differences(left: Path, right: Path) -> list[str]:
 
 
 def main() -> None:
+    """Take a snapshot of core into upstream/, or compare with --check."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--core", type=Path, required=True, help="a home-assistant/core checkout")
+    parser.add_argument(
+        "--core", type=Path, required=True, help="a home-assistant/core checkout"
+    )
     parser.add_argument("--check", action="store_true", help="compare, do not write")
     args = parser.parse_args()
     core: Path = args.core.resolve()
@@ -107,7 +121,9 @@ def main() -> None:
         diff = differences(staging, UPSTREAM)
         shutil.rmtree(staging)
         if diff:
-            sys.exit("upstream/ differs from the core checkout:\n  " + "\n  ".join(diff))
+            sys.exit(
+                "upstream/ differs from the core checkout:\n  " + "\n  ".join(diff)
+            )
         print("upstream/ matches the core checkout")
         return
 

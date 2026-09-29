@@ -1,21 +1,97 @@
-# Airdress for Home Assistant
+<p align="center">
+  <a href="https://airdress.co">
+    <img src="https://raw.githubusercontent.com/airdress-co/airdress-home-assistant/main/docs/assets/airdress-banner.png" alt="Airdress" width="640">
+  </a>
+</p>
 
-Link your [Home Assistant](https://www.home-assistant.io/) to your
-[airdress](https://airdress.co), so that functions running on your airdress can
-operate and observe exactly the entities you chose to share, and nothing else.
+<h1 align="center">Airdress for Home Assistant</h1>
 
-> **Beta, installed through HACS as a custom repository.** The integration is
-> written for Home Assistant itself, and this repository carries it until a Home
-> Assistant release ships it. It is not in the HACS default store.
+<p align="center">
+  <strong>Your home, reachable from your airdress. No port forwarding, no VPN.</strong>
+</p>
+
+<p align="center">
+  <a href="https://hacs.xyz/docs/faq/custom_repositories/"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS custom repository"></a>
+  <a href="https://github.com/airdress-co/airdress-home-assistant/releases"><img src="https://img.shields.io/github/v/release/airdress-co/airdress-home-assistant?include_prereleases&amp;label=release" alt="Latest release"></a>
+  <a href="https://github.com/airdress-co/airdress-home-assistant/actions/workflows/ci.yml"><img src="https://github.com/airdress-co/airdress-home-assistant/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/airdress-co/airdress-home-assistant" alt="License: Apache 2.0"></a>
+</p>
+
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=airdress-co&amp;repository=airdress-home-assistant&amp;category=integration"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open your Home Assistant instance and open this repository in HACS"></a>
+</p>
+
+Link your [Home Assistant](https://www.home-assistant.io/) to your own
+[airdress](https://airdress.co). Functions running on your airdress can then
+press the buttons you exposed and read the state you exposed, and Home
+Assistant gets events from Airdress and a way to message you in your Airdress
+chat.
+
+## Why
+
+Your home automation already knows when the door opened and can turn the
+heating up. What it usually cannot do is take part in anything outside the
+house without opening a port on your router or running a VPN.
+
+Home Assistant dials out to your airdress and holds that connection open, so
+nothing on your router changes and nothing listens for the internet.
+What your airdress can reach is exactly what you chose in Home Assistant,
+entity by entity, and nothing else.
+
+## Features
+
+- **Operate.** Your airdress's functions run the actions of the entities you
+  share for operation: turn on a light, press a button, set a thermostat. Each
+  action is checked in Home Assistant before it runs, whatever your airdress
+  allowed, and appears in the logbook naming the function that ran it.
+- **Observe.** Functions read the state of the entities you share, and can
+  follow their changes as they happen.
+- **Events.** Your airdress declares events; each becomes an event entity in
+  Home Assistant that your automations can trigger on.
+- **Messages to you.** A notify entity, *Home conversation*, delivers messages
+  from your automations to the Home conversation in the Airdress app on your
+  phones.
+- **Your location, if you send it.** A device tracker follows your position
+  when a function on your airdress reports it, with your consent.
+- **Outbound only.** Home Assistant holds a WebSocket open to your airdress,
+  and falls back to HTTP long-polling on networks that refuse WebSockets. It
+  remembers per network which one worked.
+- **English and German.**
+
+## Screenshots
+
+<!--
+  Screenshots come later. Do not add mockups or edited images here: each
+  slot is a real capture from a running Home Assistant, saved under
+  docs/assets/screenshots/ and linked by its raw.githubusercontent.com URL,
+  so that HACS renders it too. Wanted, in this order:
+    1. config-flow-sign-in.png   Add integration -> Airdress -> "Sign in with Airdress"
+    2. approve.png               the approval step, with its confirmation code
+    3. exposure-options.png      the options: entities to operate and to observe
+    4. entities.png              the integration's entities (event, notify, tracker)
+    5. home-conversation.png     a message from Home Assistant in the Airdress app
+-->
+
+Screenshots are on their way. The shots planned:
+
+| | |
+|---|---|
+| Sign in with Airdress | *coming soon* |
+| Approving the link on your airdress | *coming soon* |
+| Choosing what to expose | *coming soon* |
+| The integration's entities | *coming soon* |
+| The Home conversation in the Airdress app | *coming soon* |
 
 ## What you need
 
 - **An airdress.** Airdress is invite-only today; without one there is nothing
-  to link to.
+  to link to. [Join the waitlist at airdress.co](https://airdress.co).
 - **Home Assistant 2026.9.0 or newer.**
 - [HACS](https://hacs.xyz/).
 
 ## Install
+
+Use the button above, or:
 
 1. In HACS, open the menu, choose **Custom repositories**, and add
    `https://github.com/airdress-co/airdress-home-assistant` with the type
@@ -24,26 +100,74 @@ operate and observe exactly the entities you chose to share, and nothing else.
    this is a beta: switch on **Show beta versions** for the repository if HACS
    offers none.
 3. Restart Home Assistant.
-4. **Settings → Devices & services → Add integration → Airdress**, then
-   **Sign in with Airdress** and follow the steps. You approve the link on your
-   own airdress; nothing is shared until you choose entities in the
-   integration's options.
 
-## What it shares
+## Set it up
 
-Nothing by default. In the integration's options you choose which entities
-your airdress may **operate** and which it may only **observe**. Locks, alarm
-panels, and garage, door, gate, window and unclassified covers are refused
-unless you opt each one in separately, and your airdress has to allow it as
-well. Every action taken from your airdress appears in the logbook, naming the
-function that took it.
+1. **Settings → Devices & services → Add integration → Airdress.**
+2. Choose **Sign in with Airdress**. Open airdress.co, sign in, confirm the
+   code Home Assistant shows, and pick your airdress.
+3. **Approve** the link on your airdress. Check that it shows the same
+   confirmation code as Home Assistant before you approve. Home Assistant
+   continues by itself once you have.
+
+You can also link by entering your airdress's address, or with a pre-auth key
+you created on your airdress, which skips approving by hand.
+
+## What it exposes
+
+**Nothing by default.** In the integration's options you choose, entity by
+entity:
+
+- **Operate:** your functions can run the entity's actions and read its state.
+- **Observe:** your functions can read its state, nothing more.
+
+Locks, alarm panels, and garage door, door, gate, window and unclassified
+covers are **sensitive**. Sharing one for operation is not enough: you allow
+each one again in a separate step, and your airdress has to allow it too.
+Anything not allowed on both sides is refused.
+
+Actions run as a dedicated *Airdress* user in Home Assistant, which is not an
+administrator. Airdress's own entities are never shared back.
+
+## Privacy
+
+- **What leaves Home Assistant:** the state of the entities you share, when a
+  function reads it or follows it, and the result of each action it runs. For
+  followed entities, only the attributes your airdress asked for. Messages you
+  send through the notify entity go to your airdress.
+- **Where it goes:** to your airdress only. Home Assistant contacts airdress.co
+  only while you link it with **Sign in with Airdress**.
+- **Your location is not recorded by default.** When a function sends your
+  position, Home Assistant's history keeps only *home*, *away* or the zone,
+  never your coordinates. Keeping coordinates is a separate option behind a
+  confirmation, and you can exclude the tracker from the recorder entirely.
+- **The link's key** is stored in Home Assistant's configuration, so it is in
+  your backups. Remove the integration, or revoke the machine on your
+  airdress, to end the link.
+
+## Beta
+
+This is a beta. The integration is written for Home Assistant itself and is
+planned to ship as a core integration; this repository carries the same code
+until a Home Assistant release includes it. That is also why it is a HACS
+custom repository and not in the HACS default store.
+
+Report problems on the [issue tracker](https://github.com/airdress-co/airdress-home-assistant/issues).
 
 ## Remove it
 
 **Settings → Devices & services → Airdress → Delete**, then remove it in HACS.
 To end the link on your airdress's side as well, revoke the machine there.
 
-## How this repository is made
+## Links
+
+- [airdress.co](https://airdress.co)
+- [Support](https://airdress.co/support)
+- [Issues](https://github.com/airdress-co/airdress-home-assistant/issues)
+- The protocol lives in the [`airdress-home`](https://github.com/airdress-co/airdress-home)
+  library.
+
+## Development
 
 Nothing in `custom_components/airdress/` or `tests/airdress/` is edited here.
 They are generated:
@@ -64,6 +188,21 @@ CI runs `scripts/generate.py --check` and fails when the generated trees
 differ from what `upstream/` and `overlay/` produce, so a hand edit cannot be
 merged.
 
+The code is held to Home Assistant core's own bar, and CI enforces it:
+
+- **ruff** with core's rule set (`pyproject.toml`, `tests/ruff.toml`), check
+  and format;
+- **mypy `--strict`** over `custom_components/airdress`, against the Home
+  Assistant release the tests run on;
+- **100% test coverage** of `custom_components/airdress`.
+
+```sh
+uv venv --python 3.14 && uv pip install -r requirements_test.txt
+prek install                                     # ruff, mypy, generated files
+prek run --all-files
+.venv/bin/python -m pytest --cov                 # fails under 100%
+```
+
 To update the mirror from a core checkout:
 
 ```sh
@@ -76,9 +215,6 @@ To release, set `version` (and `library`, if the library moved) in
 `overlay/mirror.json`, regenerate, merge, and push the tag `v<version>`. The
 release workflow refuses a tag that is not the manifest's version, and a
 library pin that is not on PyPI.
-
-The protocol lives in the [`airdress-home`](https://github.com/airdress-co/airdress-home)
-library, not here.
 
 ## License
 

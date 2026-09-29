@@ -21,7 +21,11 @@ from homeassistant.helpers import entity_registry as er
 
 from .conftest import FakeChannel
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events, async_mock_service
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_capture_events,
+    async_mock_service,
+)
 
 
 async def _share(

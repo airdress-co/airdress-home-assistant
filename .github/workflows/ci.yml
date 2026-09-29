@@ -16,12 +16,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ruff (core's rules), mypy --strict and the generated-files check all run
+  # as prek hooks; see .pre-commit-config.yaml.
   prek:
     name: Pre-commit (prek), including the generated-files check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.14"
       - run: uvx prek run --all-files --show-diff-on-failure
 
   hassfest:
@@ -53,4 +57,5 @@ jobs:
           python-version: "3.14"
       - run: uv venv
       - run: uv pip install -r requirements_test.txt
-      - run: .venv/bin/python -m pytest -q
+      # pyproject.toml sets the gate: 100% of custom_components/airdress.
+      - run: .venv/bin/python -m pytest -q --cov --cov-report=term
