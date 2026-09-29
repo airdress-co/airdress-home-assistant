@@ -6,6 +6,13 @@ and HACS read that as the same version as `0.1.0b4`. Entries from 0.1.0-b4 on
 are generated from conventional commits; the ones below were written by hand
 from the history before that.
 
+## [0.1.0-b5](https://github.com/airdress-co/airdress-home-assistant/compare/v0.1.0-b4...v0.1.0-b5) (2026-09-29)
+
+
+### Bug Fixes
+
+* require airdress-home 0.1.0b4, and keep the version in the form release-please can bump ([8e7ba1c](https://github.com/airdress-co/airdress-home-assistant/commit/8e7ba1c48659148939f917cc52f6e4f298919f24))
+
 ## [0.1.0-b4](https://github.com/airdress-co/airdress-home-assistant/compare/v0.1.0-b3...v0.1.0-b4) (2026-09-29)
 
 
