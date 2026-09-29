@@ -13,7 +13,7 @@
     "airdress_home"
   ],
   "requirements": [
-    "airdress-home==0.1.0b3"
+    "airdress-home==0.1.0b4"
   ],
-  "version": "0.1.0-b4b3"
+  "version": "0.1.0-b4"
 }

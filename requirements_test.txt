@@ -5,7 +5,7 @@ pytest-homeassistant-custom-component==0.13.367
 home-assistant-frontend==20260826.7
 # The library the manifest pins. scripts/generate.py writes this line from
 # overlay/mirror.json and --check fails when it differs; do not edit it here.
-airdress-home==0.1.0b3
+airdress-home==0.1.0b4
 # Type checking and the coverage gate, at core's versions.
 mypy==2.3.1
 pytest-cov==7.1.0
