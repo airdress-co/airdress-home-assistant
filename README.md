@@ -58,6 +58,8 @@ scripts/generate.py          builds the generated trees from the two
 ```
 
 `scripts/generate.py` documents every difference from the core integration.
+It also writes the `airdress-home` line of `requirements_test.txt` from
+`overlay/mirror.json`, so the tests run against the library the manifest pins.
 CI runs `scripts/generate.py --check` and fails when the generated trees
 differ from what `upstream/` and `overlay/` produce, so a hand edit cannot be
 merged.
