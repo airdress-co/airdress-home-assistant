@@ -56,6 +56,10 @@
           "link": "Sign in with Airdress",
           "preauth": "Use a pre-auth key"
         }
+      },
+      "reauth_confirm": {
+        "title": "[%key:common::config_flow::title::reauth%]",
+        "description": "Your operator at {operator} no longer accepts this Home Assistant. If its approval lapsed, Home Assistant asks for it again and stays linked as it was. If it was revoked, Home Assistant enrolls as a new machine, which you approve and link again. What you share is kept."
       }
     }
   },
@@ -70,10 +74,28 @@
       "message": "This link has no pinned operator key. Remove it and link again."
     },
     "not_authorized": {
-      "message": "Your operator no longer accepts this Home Assistant. It was revoked or its approval lapsed; remove it and link again."
+      "message": "Your operator no longer accepts this Home Assistant. It was revoked or its approval lapsed; reauthenticate to link it again."
     },
     "not_linked": {
       "message": "Your operator knows this Home Assistant but has not linked it as a home yet."
+    },
+    "notify_not_connected": {
+      "message": "Your airdress's operator is not connected, so the message was not sent."
+    },
+    "notify_rate_limited": {
+      "message": "Your airdress took no more messages from Home Assistant for now. It accepts a few a minute and a couple of hundred a day."
+    },
+    "notify_disabled": {
+      "message": "Messaging from Home Assistant is turned off in Airdress."
+    },
+    "notify_too_long": {
+      "message": "The message is too long for Airdress: at most 1,000 characters, the title included."
+    },
+    "notify_rejected": {
+      "message": "Airdress refused an empty message."
+    },
+    "notify_failed": {
+      "message": "Your airdress's operator could not store the message."
     }
   },
   "options": {
@@ -98,6 +120,31 @@
         },
         "description": "{count} of the entities you chose to operate lock, unlock or open something. They are refused unless you allow each one here and on your operator.",
         "title": "Sensitive entities"
+      },
+      "location": {
+        "title": "Your location in Home Assistant",
+        "description": "Your airdress's functions can show where you are on {trackers}. Home Assistant always keeps a history of whether you are home, away or in one of its zones. To keep even that out, exclude the tracker in Home Assistant's recorder settings.",
+        "data": {
+          "record_location": "Keep a history of your coordinates"
+        },
+        "data_description": {
+          "record_location": "Off: Home Assistant's history holds only home, away or the zone, never where exactly you were."
+        }
+      },
+      "location_confirm": {
+        "title": "Keep your coordinates?",
+        "description": "Home Assistant will keep your coordinates for its history period (10 days unless you changed it). They will be in every backup, and anything in Home Assistant that reads history can see them. Coordinates recorded before you turn this off again stay until the history period ends.",
+        "menu_options": {
+          "location_record": "Keep my coordinates",
+          "location": "Back"
+        }
+      }
+    }
+  },
+  "entity": {
+    "notify": {
+      "conversation": {
+        "name": "Home conversation"
       }
     }
   }

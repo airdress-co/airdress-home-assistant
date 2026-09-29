@@ -1,13 +1,15 @@
 """Test the Airdress config flow."""
 
 import asyncio
-from unittest.mock import AsyncMock
+from collections.abc import Generator
+from unittest.mock import AsyncMock, patch
 
 import aiohttp
 from airdress_home import (
     EnrollmentDenied,
     EnrollmentError,
     EnrollmentExpired,
+    NotAuthorized,
     OperatorProofError,
 )
 import pytest
@@ -21,13 +23,16 @@ from homeassistant.components.airdress.const import (
     CONF_OPERATOR,
     CONF_OPERATOR_KEY,
     CONF_PREAUTH_KEY,
+    CONF_RECORD_LOCATION,
     CONF_SENSITIVE,
     DOMAIN,
+    REAUTH_REFUSAL,
 )
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import ATTR_DEVICE_CLASS, CONF_ADDRESS
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import entity_registry as er
 
 from .conftest import ENROLLMENT, LINK, MACHINE_KEY, ORIGIN, started
 
@@ -382,6 +387,7 @@ async def test_options_levels_without_sensitive_entities(
         CONF_OPERATE: ["button.office_pc"],
         CONF_OBSERVE: ["sensor.washer"],
         CONF_SENSITIVE: [],
+        CONF_RECORD_LOCATION: False,
     }
 
 
@@ -420,4 +426,198 @@ async def test_options_sensitive_entities_need_their_own_opt_in(
         CONF_OPERATE: ["lock.front", "cover.garage", "cover.blind"],
         CONF_OBSERVE: [],
         CONF_SENSITIVE: ["cover.garage"],
+        CONF_RECORD_LOCATION: False,
     }
+
+
+def _with_tracker(hass: HomeAssistant, entry: MockConfigEntry) -> str:
+    entry.add_to_hass(hass)
+    reg = er.async_get(hass).async_get_or_create(
+        "device_tracker",
+        "airdress",
+        f"{ENROLLMENT.machine_id}-tracker-jefe",
+        config_entry=entry,
+        suggested_object_id="home_test_jefe",
+    )
+    return reg.entity_id
+
+
+async def test_options_location_defaults_to_not_recording(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """With a tracker, the last step asks, and "no" is the default."""
+    tracker = _with_tracker(hass, mock_config_entry)
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "location"
+    assert result["description_placeholders"] == {"trackers": tracker}
+    (key,) = result["data_schema"].schema
+    assert key.description == {"suggested_value": False}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_RECORD_LOCATION: False}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options[CONF_RECORD_LOCATION] is False
+
+
+async def test_options_recording_needs_a_confirmation(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Choosing to record shows what it means; back returns, confirming records."""
+    _with_tracker(hass, mock_config_entry)
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_RECORD_LOCATION: True}
+    )
+    assert result["type"] is FlowResultType.MENU
+    assert result["step_id"] == "location_confirm"
+    assert result["menu_options"] == ["location_record", "location"]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "location"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "location"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_RECORD_LOCATION: True}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "location_record"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options[CONF_RECORD_LOCATION] is True
+
+
+async def test_options_without_a_tracker_keep_the_recording_choice(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """No tracker, no question; an earlier choice is kept."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        options={**mock_config_entry.options, CONF_RECORD_LOCATION: True},
+    )
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options[CONF_RECORD_LOCATION] is True
+
+
+@pytest.fixture
+def mock_renew() -> Generator[AsyncMock]:
+    """The operator's answer to a machine asking to be approved again."""
+    with patch(
+        "homeassistant.components.airdress.config_flow.start_reauth",
+        return_value=started(),
+    ) as renew:
+        yield renew
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_reauth_renews_a_lapsed_machine(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_enroll: dict[str, AsyncMock],
+    mock_renew: AsyncMock,
+    approval: asyncio.Event,
+) -> None:
+    """A lapsed approval is renewed for the same machine and key."""
+    mock_config_entry.add_to_hass(hass)
+    before = dict(mock_config_entry.data)
+    result = await mock_config_entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+    assert result["description_placeholders"]["operator"] == "home-test.a.airdr.es"
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.SHOW_PROGRESS
+    assert result["step_id"] == "approve"
+    client = mock_renew.call_args.args[0]
+    assert client.enrollment.machine_id == before[CONF_MACHINE_ID]
+    assert client.key.seed_b64() == before[CONF_MACHINE_KEY]
+    mock_enroll["start"].assert_not_called()
+
+    result = await _approve(hass, result["flow_id"], approval)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert dict(mock_config_entry.data) == before
+    assert mock_enroll["poll"].call_args.args[2].seed_b64() == before[CONF_MACHINE_KEY]
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_reauth_enrolls_a_new_machine_after_a_revoke(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_enroll: dict[str, AsyncMock],
+    mock_renew: AsyncMock,
+    approval: asyncio.Event,
+) -> None:
+    """A revoked machine cannot be renewed: a new one is enrolled; sharing is kept."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={**mock_config_entry.data, CONF_MACHINE_ID: "the-revoked-machine"},
+        options={**mock_config_entry.options, CONF_OPERATE: ["button.office_pc"]},
+    )
+    mock_renew.side_effect = NotAuthorized("unauthorized")
+    result = await mock_config_entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.SHOW_PROGRESS
+    assert mock_enroll["start"].call_args.args[1] == ORIGIN
+
+    result = await _approve(hass, result["flow_id"], approval)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert dict(mock_config_entry.data) == EXPECTED_DATA
+    assert mock_config_entry.options[CONF_OPERATE] == ["button.office_pc"]
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+@pytest.mark.parametrize(("refusal", "renewed"), [("revoked", False), ("lapsed", True)])
+async def test_reauth_follows_the_refusal(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_enroll: dict[str, AsyncMock],
+    mock_renew: AsyncMock,
+    refusal: str,
+    renewed: bool,
+) -> None:
+    """Revoked goes straight to a new enrollment; lapsed asks for a renewal."""
+    mock_config_entry.add_to_hass(hass)
+    result = await mock_config_entry.start_reauth_flow(
+        hass, data={**mock_config_entry.data, REAUTH_REFUSAL: refusal}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.SHOW_PROGRESS
+    assert mock_renew.called is renewed
+    assert mock_enroll["start"].called is not renewed
+
+
+@pytest.mark.parametrize(
+    ("renew_error", "enroll_error", "reason"),
+    [
+        (aiohttp.ClientError, None, "cannot_connect"),
+        (OperatorProofError("x"), None, "operator_proof"),
+        (EnrollmentError("slow_down"), None, "busy"),
+        (NotAuthorized("unauthorized"), aiohttp.ClientError, "cannot_connect"),
+    ],
+)
+async def test_reauth_shows_why_the_operator_refused(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_enroll: dict[str, AsyncMock],
+    mock_renew: AsyncMock,
+    renew_error: Exception | type[Exception],
+    enroll_error: type[Exception] | None,
+    reason: str,
+) -> None:
+    """A refused renewal or enrollment keeps the form, with the reason."""
+    mock_config_entry.add_to_hass(hass)
+    mock_renew.side_effect = renew_error
+    if enroll_error is not None:
+        mock_enroll["start"].side_effect = enroll_error
+    result = await mock_config_entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": reason}

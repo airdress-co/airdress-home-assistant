@@ -49,6 +49,10 @@
                 },
                 "title": "Link with a pre-auth key"
             },
+            "reauth_confirm": {
+                "description": "Your operator at {operator} no longer accepts this Home Assistant. If its approval lapsed, Home Assistant asks for it again and stays linked as it was. If it was revoked, Home Assistant enrolls as a new machine, which you approve and link again. What you share is kept.",
+                "title": "Authentication expired for {name}"
+            },
             "user": {
                 "description": "Link Home Assistant to your airdress, so that your functions can run the actions and read the entities you choose to share. Nothing is shared until you choose it in the options.",
                 "menu_options": {
@@ -56,6 +60,13 @@
                     "link": "Sign in with Airdress",
                     "preauth": "Use a pre-auth key"
                 }
+            }
+        }
+    },
+    "entity": {
+        "notify": {
+            "conversation": {
+                "name": "Home conversation"
             }
         }
     },
@@ -70,10 +81,28 @@
             "message": "This link has no pinned operator key. Remove it and link again."
         },
         "not_authorized": {
-            "message": "Your operator no longer accepts this Home Assistant. It was revoked or its approval lapsed; remove it and link again."
+            "message": "Your operator no longer accepts this Home Assistant. It was revoked or its approval lapsed; reauthenticate to link it again."
         },
         "not_linked": {
             "message": "Your operator knows this Home Assistant but has not linked it as a home yet."
+        },
+        "notify_disabled": {
+            "message": "Messaging from Home Assistant is turned off in Airdress."
+        },
+        "notify_failed": {
+            "message": "Your airdress's operator could not store the message."
+        },
+        "notify_not_connected": {
+            "message": "Your airdress's operator is not connected, so the message was not sent."
+        },
+        "notify_rate_limited": {
+            "message": "Your airdress took no more messages from Home Assistant for now. It accepts a few a minute and a couple of hundred a day."
+        },
+        "notify_rejected": {
+            "message": "Airdress refused an empty message."
+        },
+        "notify_too_long": {
+            "message": "The message is too long for Airdress: at most 1,000 characters, the title included."
         }
     },
     "options": {
@@ -88,6 +117,24 @@
                     "operate": "Your functions can run their actions, and read their state."
                 },
                 "description": "Choose what your airdress's functions can reach. Nothing else is visible to them."
+            },
+            "location": {
+                "data": {
+                    "record_location": "Keep a history of your coordinates"
+                },
+                "data_description": {
+                    "record_location": "Off: Home Assistant's history holds only home, away or the zone, never where exactly you were."
+                },
+                "description": "Your airdress's functions can show where you are on {trackers}. Home Assistant always keeps a history of whether you are home, away or in one of its zones. To keep even that out, exclude the tracker in Home Assistant's recorder settings.",
+                "title": "Your location in Home Assistant"
+            },
+            "location_confirm": {
+                "description": "Home Assistant will keep your coordinates for its history period (10 days unless you changed it). They will be in every backup, and anything in Home Assistant that reads history can see them. Coordinates recorded before you turn this off again stay until the history period ends.",
+                "menu_options": {
+                    "location": "Back",
+                    "location_record": "Keep my coordinates"
+                },
+                "title": "Keep your coordinates?"
             },
             "sensitive": {
                 "data": {
