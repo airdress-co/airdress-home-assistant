@@ -48,6 +48,46 @@ jobs:
           python-version: "3.14"
       - run: uvx prek run --all-files --show-diff-on-failure
 
+  # The same mypy settings as the prek hook (core's, in pyproject.toml), but
+  # against Home Assistant's dev branch rather than the release the tests run
+  # on: where core is heading shows here before a release does. Not a
+  # required check, since dev can break it without any change here. It uses
+  # core dev's stubs/ and mypy_plugins/ in place of this repository's copies,
+  # and says so when they differ.
+  mypy-dev:
+    name: mypy (Home Assistant dev)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.14"
+      # A shallow, sparse clone: the package and what installing it needs,
+      # and the two mypy inputs.
+      - name: Check out Home Assistant dev
+        run: |
+          git clone --quiet --depth 1 --branch dev --filter=blob:none --sparse \
+            https://github.com/home-assistant/core "$RUNNER_TEMP/core"
+          git -C "$RUNNER_TEMP/core" sparse-checkout set --no-cone \
+            '/homeassistant/' '/pyproject.toml' '/requirements*.txt' '/README.rst' \
+            '/LICENSE*' '/MANIFEST.in' '/stubs/' '/mypy_plugins/'
+          echo "Home Assistant dev at $(git -C "$RUNNER_TEMP/core" rev-parse --short HEAD)"
+      - name: Install it, with core dev's mypy and the pinned library
+        run: |
+          uv venv
+          mapfile -t pins < <(grep -E '^(mypy|pydantic)==' "$RUNNER_TEMP/core/requirements_test.txt")
+          uv pip install "$RUNNER_TEMP/core" "${pins[@]}" \
+            "$(grep -E '^airdress-home==' requirements_test.txt)"
+      - name: Core dev's stubs and mypy plugins
+        run: |
+          for dir in stubs mypy_plugins; do
+            if ! diff -r --exclude=__pycache__ "$RUNNER_TEMP/core/$dir" "$dir" >/dev/null; then
+              echo "::notice::core dev's $dir/ differs from this repository's copy; checking with core dev's"
+            fi
+            rm -rf "$dir" && cp -r "$RUNNER_TEMP/core/$dir" "$dir"
+          done
+      - run: .venv/bin/mypy
+
   hassfest:
     name: hassfest
     runs-on: ubuntu-24.04

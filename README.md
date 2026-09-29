@@ -192,8 +192,11 @@ The code is held to Home Assistant core's own bar, and CI enforces it:
 
 - **ruff** with core's rule set (`pyproject.toml`, `tests/ruff.toml`), check
   and format;
-- **mypy `--strict`** over `custom_components/airdress`, against the Home
-  Assistant release the tests run on;
+- **mypy with exactly core's settings** for a strict-typed integration
+  (core's `mypy.ini` section for `homeassistant.components.airdress`, with
+  core's `stubs/` and `mypy_plugins/` copied verbatim), over
+  `custom_components/airdress`: against the Home Assistant release the tests
+  run on, and in CI also against Home Assistant `dev`;
 - **100% test coverage** of `custom_components/airdress`.
 
 ```sh
@@ -250,5 +253,6 @@ and remove `versioning`, `prerelease` and `prerelease-type` from
 
 ## License
 
-Apache License 2.0; see [LICENSE](LICENSE). `tests/logbook_common.py` is
-copied from Home Assistant core, also under the Apache License 2.0.
+Apache License 2.0; see [LICENSE](LICENSE). `tests/logbook_common.py`,
+`stubs/` and `mypy_plugins/` are copied from Home Assistant core, also under
+the Apache License 2.0.
