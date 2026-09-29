@@ -55,6 +55,13 @@ OUT_TESTS = Path("tests/airdress")
 OUT_LOGBOOK_HELPER = Path("tests/logbook_common.py")
 TEST_REQUIREMENTS = Path("requirements_test.txt")
 LIBRARY_LINE = re.compile(r"^airdress-home\b.*$", re.MULTILINE)
+# overlay/mirror.json's version, in the SemVer form release-please writes
+# (`0.1.0-b4`), which PEP 440 and Home Assistant both read. release-please
+# rewrites the value by matching a SemVer inside it, so the PEP 440 form
+# `0.1.0b3` became `0.1.0-b4b3` in the 0.1.0-b4 release PR: a version nothing
+# reads, which only the release's tag check caught. Refused here instead, at
+# the pull request.
+MIRROR_VERSION = re.compile(r"^\d+\.\d+\.\d+(-b\d+)?$")
 
 # The ruff that formats the generated tests. It must be the version the prek
 # hooks run (.pre-commit-config.yaml), or --check and the hooks disagree.
@@ -125,6 +132,10 @@ def with_header(text: str) -> str:
 def generate(dest: Path) -> None:
     """Write every generated file under dest."""
     mirror = json.loads((OVERLAY / "mirror.json").read_text())
+    if not MIRROR_VERSION.match(mirror["version"]):
+        sys.exit(
+            f"overlay/mirror.json version {mirror['version']!r} is not X.Y.Z or X.Y.Z-bN"
+        )
     src = UPSTREAM / "homeassistant/components/airdress"
     if not (src / "manifest.json").exists():
         sys.exit("upstream/ holds no integration: run scripts/export_upstream.py first")
