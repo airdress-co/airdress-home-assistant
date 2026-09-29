@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "bc72ae76c11b2f1fb1b3aaeb033e86e3ce492d45",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "draft": true,
+  "force-tag-creation": true,
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "airdress-home-assistant",
+      "versioning": "prerelease",
+      "prerelease": true,
+      "prerelease-type": "b",
+      "bump-minor-pre-major": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "overlay/mirror.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

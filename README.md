@@ -198,7 +198,7 @@ The code is held to Home Assistant core's own bar, and CI enforces it:
 
 ```sh
 uv venv --python 3.14 && uv pip install -r requirements_test.txt
-prek install                                     # ruff, mypy, generated files
+prek install                                     # ruff, mypy, generated files, commit messages
 prek run --all-files
 .venv/bin/python -m pytest --cov                 # fails under 100%
 ```
@@ -211,10 +211,40 @@ scripts/generate.py
 # commit upstream/, overlay/ and the generated trees together
 ```
 
-To release, set `version` (and `library`, if the library moved) in
-`overlay/mirror.json`, regenerate, merge, and push the tag `v<version>`. The
-release workflow refuses a tag that is not the manifest's version, and a
-library pin that is not on PyPI.
+### Commits and releases
+
+Commit messages and PR titles are
+[conventional commits](https://www.conventionalcommits.org/en/v1.0.0/)
+(`fix: …`, `feat: …`, `docs: …`, `feat!: …` for a breaking change). The
+commit-msg hook checks each commit, and CI checks a PR's title and commits.
+
+Releases are made by [release-please](https://github.com/googleapis/release-please),
+never by hand:
+
+1. Every push to `main` updates one open release PR, `chore(main): release
+   <version>`. It sets `version` in `overlay/mirror.json` and
+   `.release-please-manifest.json` and adds the `CHANGELOG.md` entry; a
+   second commit on it, `chore: regenerate for <version>`, runs
+   `scripts/generate.py` so the manifest carries the new version and the
+   generated-files check passes. A `fix:` or `feat:` commit makes a release
+   PR; `docs:`, `chore:`, `ci:` and the like do not on their own.
+2. Merging that PR tags `vX.Y.Z-bN` and creates a draft GitHub release.
+3. The tag starts `release.yml`, which refuses a tag that is not the
+   manifest's version and a library pin that is not on PyPI, and then
+   publishes the draft as a pre-release, which HACS offers to users who
+   opted in to betas.
+
+**The library pin is not part of this.** `library` in `overlay/mirror.json`
+names the `airdress-home` release the integration installs, and it moves only
+in its own PR, e.g. `fix: require airdress-home 0.1.0b4`, once that release
+is on PyPI and the tests pass against it.
+
+Until 0.1.0 every version is a beta: `fix:`, `feat:` and even a breaking
+change all move `0.1.0-b3` to `0.1.0-b4`. release-please spells it with a
+hyphen; Home Assistant and HACS read it as the same version as `0.1.0b4`. To
+leave the betas, put `Release-As: 0.1.0` in the body of a commit on `main`,
+and remove `versioning`, `prerelease` and `prerelease-type` from
+`release-please-config.json`.
 
 ## License
 
