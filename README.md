@@ -96,10 +96,40 @@ Use the button above, or:
 1. In HACS, open the menu, choose **Custom repositories**, and add
    `https://github.com/airdress-co/airdress-home-assistant` with the type
    **Integration**.
-2. Find **Airdress** in HACS and download it. Releases are pre-releases while
-   this is a beta: switch on **Show beta versions** for the repository if HACS
-   offers none.
+2. Find **Airdress** in HACS and download it. In the download dialog, open
+   **Need a different version?** and choose the newest release (see below).
 3. Restart Home Assistant.
+
+**Every release is a pre-release while this is a beta.** HACS offers
+pre-releases only for a repository that has them switched on, and for a new
+one they are off. With them off and no full release to fall back on, HACS
+downloads the default branch (`main`) as it stands, not a release: that is the
+commit you see in **Version … will be downloaded**. So choose the release in
+**Need a different version?**, which lists pre-releases too. For updates to
+reach you as well, turn pre-releases on after the download: HACS adds a
+**Pre-release** switch to the repository's device (Settings → Devices &
+services → HACS → Airdress), disabled by default; enable that entity and turn
+it on.
+
+### Manual install (without HACS)
+
+HACS is recommended, because it tracks updates for you. Without it:
+
+1. Download the source code of the newest pre-release, as **zip** or
+   **tar.gz**, from
+   [Releases](https://github.com/airdress-co/airdress-home-assistant/releases).
+   Releases carry no other assets.
+2. Unpack it. Copy the folder `custom_components/airdress/` from inside the
+   unpacked `airdress-home-assistant-<version>/` (for example
+   `airdress-home-assistant-0.1.0b3/`) into the
+   `custom_components/` folder of your Home Assistant configuration folder
+   (the one holding `configuration.yaml`; create `custom_components/` if it
+   is not there), so you end up with `custom_components/airdress/manifest.json`.
+3. Restart Home Assistant.
+
+On its first load Home Assistant installs the `airdress-home` library the
+integration pins, from PyPI, so it needs internet access then. To update,
+repeat the copy with the newer release, replacing the folder, and restart.
 
 ## Set it up
 
@@ -162,6 +192,7 @@ To end the link on your airdress's side as well, revoke the machine there.
 ## Links
 
 - [airdress.co](https://airdress.co)
+- [Airdress for Home Assistant on airdress.co](https://airdress.co/home-assistant)
 - [Support](https://airdress.co/support)
 - [Issues](https://github.com/airdress-co/airdress-home-assistant/issues)
 - The protocol lives in the [`airdress-home`](https://github.com/airdress-co/airdress-home)
