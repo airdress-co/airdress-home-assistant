@@ -1,0 +1,75 @@
+# Keeps a release PR open for the next version, from the conventional commits
+# on main (release-please). The PR bumps overlay/mirror.json, and a commit on
+# top regenerates the integration from it, so the generated-files check
+# passes. Merging the PR tags `vX.Y.Z-bN` and creates a draft GitHub
+# release; the tag starts release.yml, which checks the release and then
+# publishes the draft as a pre-release for HACS.
+#
+# Everything here runs as the airdress-bot GitHub App, not GITHUB_TOKEN:
+# a PR, a push or a tag made with GITHUB_TOKEN starts no workflow, so the
+# release PR would get none of its four required checks, and the tag would
+# never be checked and released.
+#
+# The library pin in overlay/mirror.json ("library") is never bumped here: a
+# new airdress-home release is adopted deliberately, in its own PR.
+name: Release PR
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: bot
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ steps.bot.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Check out the release PR
+        if: steps.release.outputs.prs_created == 'true'
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ steps.bot.outputs.token }}
+      - if: steps.release.outputs.prs_created == 'true'
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.14"
+      - name: Regenerate from the new version
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          SLUG: ${{ steps.bot.outputs.app-slug }}
+        run: |
+          python3 scripts/generate.py
+          python3 scripts/generate.py --check
+          version=$(jq -r .version overlay/mirror.json)
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "the generated files already name $version"
+            exit 0
+          fi
+          id=$(gh api "/users/${SLUG}%5Bbot%5D" --jq .id)
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: regenerate for $version"
+          git push
