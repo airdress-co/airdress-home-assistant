@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0b3",
+  "version": "0.1.0-b4b3",
   "library": "airdress-home==0.1.0b3",
   "homeassistant": "2026.9.0"
 }
