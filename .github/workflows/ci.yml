@@ -24,6 +24,7 @@ jobs:
   conventional-commits:
     name: Conventional commits
     if: github.event_name == 'pull_request'
+    timeout-minutes: 10
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -40,6 +41,7 @@ jobs:
   # as prek hooks; see .pre-commit-config.yaml.
   prek:
     name: Pre-commit (prek), including the generated-files check
+    timeout-minutes: 10
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -56,6 +58,7 @@ jobs:
   # and says so when they differ.
   mypy-dev:
     name: mypy (Home Assistant dev)
+    timeout-minutes: 10
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -90,6 +93,7 @@ jobs:
 
   hassfest:
     name: hassfest
+    timeout-minutes: 10
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -97,6 +101,7 @@ jobs:
 
   hacs:
     name: HACS validation
+    timeout-minutes: 10
     runs-on: ubuntu-24.04
     steps:
       - uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
@@ -109,6 +114,7 @@ jobs:
 
   test:
     name: Tests (released Home Assistant)
+    timeout-minutes: 10
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
