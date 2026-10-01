@@ -1,6 +1,9 @@
 # Publishes a GitHub release for a `vX.Y.Z` (or `vX.Y.Z-bN`) tag, which is what
-# HACS installs. A pre-release version becomes a GitHub pre-release, shown in
-# HACS only to users who opt in to betas.
+# HACS installs. Every release is published as a regular GitHub release, even
+# a `-bN` one: HACS offers a pre-release only to a repository whose beta
+# switch is on, and with none it falls back to a commit of the default
+# branch, whose download failed (404) on HACS 2.0.5 the first time it was
+# tried. The version itself still says beta.
 #
 # release-please makes the tag when its release PR is merged
 # (release-please.yml), with a draft release; this publishes that draft once
@@ -51,13 +54,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          prerelease=()
-          if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
-            prerelease=(--prerelease)
-          fi
+          # release-please drafts a `-bN` release as a pre-release; undo that.
           draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft || true)
           if [ "$draft" = true ]; then
-            gh release edit "$GITHUB_REF_NAME" --draft=false "${prerelease[@]}"
+            gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease=false --latest
           else
-            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "${prerelease[@]}"
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --latest
           fi

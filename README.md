@@ -96,32 +96,24 @@ Use the button above, or:
 1. In HACS, open the menu, choose **Custom repositories**, and add
    `https://github.com/airdress-co/airdress-home-assistant` with the type
    **Integration**.
-2. Find **Airdress** in HACS and download it. In the download dialog, open
-   **Need a different version?** and choose the newest release (see below).
+2. Find **Airdress** in HACS and download it. HACS offers the newest release,
+   e.g. `v0.1.0-b5`.
 3. Restart Home Assistant.
 
-**Every release is a pre-release while this is a beta.** HACS offers
-pre-releases only for a repository that has them switched on, and for a new
-one they are off. With them off and no full release to fall back on, HACS
-downloads the default branch (`main`) as it stands, not a release: that is the
-commit you see in **Version … will be downloaded**. So choose the release in
-**Need a different version?**, which lists pre-releases too. For updates to
-reach you as well, turn pre-releases on after the download: HACS adds a
-**Pre-release** switch to the repository's device (Settings → Devices &
-services → HACS → Airdress), disabled by default; enable that entity and turn
-it on.
+Versions are betas (`0.1.0-bN`) until 0.1.0, but each is published as a
+regular release, so HACS offers it and its updates without any beta setting.
 
 ### Manual install (without HACS)
 
 HACS is recommended, because it tracks updates for you. Without it:
 
-1. Download the source code of the newest pre-release, as **zip** or
+1. Download the source code of the newest release, as **zip** or
    **tar.gz**, from
    [Releases](https://github.com/airdress-co/airdress-home-assistant/releases).
    Releases carry no other assets.
 2. Unpack it. Copy the folder `custom_components/airdress/` from inside the
    unpacked `airdress-home-assistant-<version>/` (for example
-   `airdress-home-assistant-0.1.0b3/`) into the
+   `airdress-home-assistant-0.1.0-b5/`) into the
    `custom_components/` folder of your Home Assistant configuration folder
    (the one holding `configuration.yaml`; create `custom_components/` if it
    is not there), so you end up with `custom_components/airdress/manifest.json`.
@@ -267,8 +259,8 @@ never by hand:
 2. Merging that PR tags `vX.Y.Z-bN` and creates a draft GitHub release.
 3. The tag starts `release.yml`, which refuses a tag that is not the
    manifest's version and a library pin that is not on PyPI, and then
-   publishes the draft as a pre-release, which HACS offers to users who
-   opted in to betas.
+   publishes the draft as a regular release (not a GitHub pre-release, even
+   for `-bN`), which HACS offers by default.
 
 **The library pin is not part of this.** `library` in `overlay/mirror.json`
 names the `airdress-home` release the integration installs, and it moves only
