@@ -47,6 +47,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: check-doc-numbers
+        name: document numbers stay out of code
+        entry: scripts/check-doc-numbers.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: generated
         name: generated files match upstream/ + overlay/
         entry: python3 scripts/generate.py --check
